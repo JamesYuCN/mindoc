@@ -767,7 +767,8 @@ func (c *BookController) Release() {
 		bookId = book.BookId
 	} else {
 		book, err := models.NewBookResult().FindByIdentify(identify, c.Member.MemberId)
-
+		//by yujian 20260802 非管理员不能发布，加入下面一行直接返回错误
+		err = models.ErrPermissionDenied;
 		if err != nil {
 			if err == models.ErrPermissionDenied {
 				c.JsonResult(6001, i18n.Tr(c.Lang, "message.no_permission"))
@@ -890,10 +891,14 @@ func (c *BookController) SaveSort() {
 			}
 			doc.OrderSort = int(sort)
 			doc.ParentId = int(parentId)
+			//by yujian 排序仅仅更新顺序，不修改文档的修改时间 （插入一行新的，注释掉原来的）
+			doc.UpateOrder(doc.DocumentId,doc.OrderSort,doc.ParentId)
+			/*
 			if err := doc.InsertOrUpdate(); err != nil {
 				fmt.Printf("%s", err.Error())
 				logs.Error(err)
 			}
+			*/
 		} else {
 			fmt.Printf("文档ID转换失败 => %+v", item)
 		}

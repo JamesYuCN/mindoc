@@ -851,8 +851,8 @@ func (c *DocumentController) Delete() {
 		bookId = book.BookId
 	} else {
 		bookResult, err := models.NewBookResult().FindByIdentify(identify, c.Member.MemberId)
-
-		if err != nil || bookResult.RoleId == conf.BookObserver {
+		//by yujian bookResult.roleId == conf.BookEditor 编辑者不能删除文章
+		if err != nil || bookResult.RoleId == conf.BookObserver || bookResult.RoleId == conf.BookEditor {
 			logs.Error("FindByIdentify => ", err)
 			c.JsonResult(6002, i18n.Tr(c.Lang, "message.item_not_exist_or_no_permit"))
 		}
@@ -1280,7 +1280,8 @@ func (c *DocumentController) DeleteHistory() {
 		bookId = book.BookId
 	} else {
 		bookResult, err := models.NewBookResult().FindByIdentify(identify, c.Member.MemberId)
-		if err != nil || bookResult.RoleId == conf.BookObserver {
+		// by yujian add bookResult.roleId == conf.BookEditor ,编辑者不能删除历史
+		if err != nil || bookResult.RoleId == conf.BookObserver || bookResult.RoleId == conf.BookEditor {
 			logs.Error("查找项目失败 ->", err)
 			c.JsonResult(6002, i18n.Tr(c.Lang, "message.item_not_exist_or_no_permit"))
 		}
