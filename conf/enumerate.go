@@ -102,6 +102,20 @@ func GetTokenSize() int {
 	return web.AppConfig.DefaultInt("token_size", 12)
 }
 
+// 获取首页项目列表每页显示数量，未配置时默认为 18
+func GetHomePageSize() int {
+	pageSize := web.AppConfig.DefaultInt("home_pagesize", 18)
+	if pageSize <= 0 {
+		pageSize = 18
+	}
+	return pageSize
+}
+
+// 获取首页是否显示项目封面图，未配置时默认为 true
+func GetHomeShowCover() bool {
+	return web.AppConfig.DefaultBool("home_showcover", true)
+}
+
 // 获取默认文档封面.
 func GetDefaultCover() string {
 

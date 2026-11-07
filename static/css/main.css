@@ -292,6 +292,12 @@ body .scrollbar-track-color {
     border: 1px solid #ffffff;
 }
 
+/*首页隐藏封面时紧凑显示，不保留封面高度*/
+.manual-list.no-cover .list-item {
+    height: auto;
+    margin: 10px 0;
+}
+
 .manual-list .list-item .manual-item-standard {
     float: left;
     width: 163px;

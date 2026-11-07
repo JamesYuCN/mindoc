@@ -71,6 +71,14 @@ func NewDocument() *Document {
 	}
 }
 
+//by yujian 仅更新文档的排序，不修改文档的修改时间. 更新排序 20241208 james
+func (item *Document) UpateOrder(id int,OrderSort int,ParentId int) {
+	o := orm.NewOrm()
+	o.QueryTable(item.TableNameWithPrefix()).Filter("document_id", id).Update(orm.Params{
+		"order_sort": OrderSort,"parent_id":ParentId,
+	})
+}
+
 // 根据文档ID查询指定文档.
 func (item *Document) Find(id int) (*Document, error) {
 	if id <= 0 {

@@ -1,5 +1,12 @@
 appname = mindoc
 
+#首页项目列表每页显示数量，不配置则默认为18
+home_pagesize="${MINDOC_HOME_PAGESIZE||18}"
+
+#首页是否显示项目封面图，true 显示/false 不显示（不显示时项目名称改为粗体），不配置则默认为true
+home_showcover="${MINDOC_HOME_SHOW_COVER||true}"
+
+
 #默认监听的网卡,为空则监听所有
 httpaddr="${MINDOC_ADDR}"
 httpport = "${MINDOC_PORT||8181}"

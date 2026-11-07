@@ -23,17 +23,19 @@
     {{template "widgets/header.tpl" .}}
     <div class="container manual-body">
         <div class="row">
-             <div class="manual-list">
+             <div class="manual-list{{if not $.ShowCover}} no-cover{{end}}">
                 {{range $index,$item := .Lists}}
                     <div class="list-item" data-id="{{$item.BookId}}">
                         <dl class="manual-item-standard">
+                            {{if $.ShowCover}}
                             <dt>
                                 <a href="{{urlfor "DocumentController.Index" ":key" $item.Identify}}" title="{{$item.BookName}}-{{$item.CreateName}}">
                                     <img src="{{cdnimg $item.Cover}}" class="cover" alt="{{$item.BookName}}-{{$item.CreateName}}" onerror="this.src='{{cdnimg "static/images/book.jpg"}}';">
                                 </a>
                             </dt>
+                            {{end}}
                             <dd>
-                                <a href="{{urlfor "DocumentController.Index" ":key" $item.Identify}}" class="name" title="{{$item.BookName}}-{{$item.CreateName}}">{{$item.BookName}}</a>
+                                <a href="{{urlfor "DocumentController.Index" ":key" $item.Identify}}" class="name" title="{{$item.BookName}}-{{$item.CreateName}}"{{if not $.ShowCover}} style="font-weight: bold;"{{end}}>{{$item.BookName}}</a>
                             </dd>
                             <dd>
                             <span class="author">

@@ -27,7 +27,7 @@ func (c *HomeController) Index() {
 	c.TplName = "home/index.tpl"
 
 	pageIndex, _ := c.GetInt("page", 1)
-	pageSize := 18
+	pageSize := conf.GetHomePageSize()
 	memberId := 0
 	if c.Member != nil {
 		memberId = c.Member.MemberId
@@ -44,5 +44,6 @@ func (c *HomeController) Index() {
 		c.Data["PageHtml"] = ""
 	}
 	c.Data["TotalPages"] = int(math.Ceil(float64(totalCount) / float64(pageSize)))
+	c.Data["ShowCover"] = conf.GetHomeShowCover()
 	c.Data["Lists"] = books
 }
