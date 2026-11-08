@@ -1,3 +1,12 @@
+# 这个分支的特点
+- 1.Cherry markdown 升级到 2026/10/29 的当前最新版本，绘图、图表、表格编辑功能更强，修复了没有附件按钮的bug，注意字体有变更；
+- 2.当使用Cherry markdown编辑器时，可以多人协同编辑，**注意，还是要按“保存”按钮才保存!** 部署文档主目录下"协同编辑部署说明.md"；
+- 3.文章排序不修改文章的最后修改时间,方便查询最后修改的文章（后续想加一个文章按最后修改时间倒序的列表）；
+- 4.添加了配置项，home_pagesize 指定首页的文章总数(我不喜欢分页）， home_showcover 设置为false 可以显示的更紧凑一点;
+- 5.不是管理员不能删除文章、不能删除历史记录（纯属个人偏好）
+
+**由于本人对GO不熟悉、对前端构建也不熟悉，代码全部GLM5.3生成，所以没有贡献到主分支，希望有热心人士贡献到主分支**
+
 # MinDoc 简介
 
 [![Build Status](https://travis-ci.com/mindoc-org/mindoc.svg?branch=master)](https://travis-ci.com/mindoc-org/mindoc)
