@@ -41,6 +41,7 @@
     <link href="{{cdncss "/static/webuploader/webuploader.css"}}" rel="stylesheet">
     <link href="{{cdncss "/static/css/markdown.css" "version"}}" rel="stylesheet">
     <link href="{{cdncss "/static/cherry/cherry-markdown.css" "version"}}" rel="stylesheet">
+    <link href="{{cdncss "/static/katex/katex.min.css"}}" rel="stylesheet">
     <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
     <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
     <!--[if lt IE 9]>
@@ -385,6 +386,7 @@
 <script src="{{cdnjs "/static/js/jquery.form.js"}}" type="text/javascript"></script>
 <script src="{{cdnjs "/static/js/array.js" "version"}}" type="text/javascript"></script>
 <script src="{{cdnjs "/static/js/editor.js" "version"}}" type="text/javascript"></script>
+<script src="{{cdnjs "/static/katex/katex.min.js"}}" type="text/javascript"></script>
 <script src="{{cdnjs "/static/js/cherry_markdown.js" "version"}}" type="text/javascript"></script>
 <script src="{{cdnjs "/static/cherry/cherry-markdown.js" "version"}}" type="text/javascript"></script>
 <script src="{{cdnjs "/static/js/custom-elements-builtin-0.6.5.min.js"}}" type="text/javascript"></script>

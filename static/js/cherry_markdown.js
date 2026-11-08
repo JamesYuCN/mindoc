@@ -51,23 +51,7 @@ $(function () {
         }
     };
 
-    var CustomHookA = Cherry.createSyntaxHook('codeBlock', Cherry.constants.HOOKS_TYPE_LIST.PAR, {
-        makeHtml(str) {
-            console.warn('custom hook', 'hello');
-            return str;
-        },
-        rule(str) {
-            const regex = {
-                begin: '',
-                content: '',
-                end: '',
-            };
-            regex.reg = new RegExp(regex.begin + regex.content + regex.end, 'g');
-            return regex;
-        },
-    });
     /**
-     * 自定义一个自定义菜单
      * 点第一次时，把选中的文字变成同时加粗和斜体
      * 保持光标选区不变，点第二次时，把加粗斜体的文字变成普通文本
      */
@@ -79,7 +63,7 @@ $(function () {
             // 如果是单选，并且选中内容的开始结束内没有加粗语法，则扩大选中范围
             if (!this.isSelections && !/^\s*(\*\*\*)[\s\S]+(\1)/.test($selection)) {
                 this.getMoreSelection('***', '***', () => {
-                    const newSelection = this.editor.editor.getSelection();
+                    const newSelection = this.editor.getSelection();
                     const isBoldItalic = /^\s*(\*\*\*)[\s\S]+(\1)/.test(newSelection);
                     if (isBoldItalic) {
                         $selection = newSelection;
@@ -116,9 +100,13 @@ $(function () {
     })
 
     var customMenuD = Cherry.createMenuHook('保存', {
-        id: "markdown-save",
         iconName: 'save',
         onClick: saveDocument,
+        // 新版 createMenuHook 不再支持 id 选项，通过 afterInit 给按钮补充 id，供未保存状态判断使用
+        afterInit: function (btnDom) {
+            btnDom.id = 'markdown-save';
+            btnDom.classList.add('disabled');
+        }
     });
 
     var customMenuE = Cherry.createMenuHook('边栏', {
@@ -129,6 +117,21 @@ $(function () {
     var customMenuF = Cherry.createMenuHook('历史', {
         iconName: 'history',
         onClick: showHistory,
+    });
+
+    /**
+     * 附件按钮：选择本地文件上传后，在光标处插入 [文件名](url) 链接
+     * 上传复用 myFileUpload（window.fileUploadURL，字段 editormd-file-file），交互参考 editor.md 的 file-dialog 实现
+     */
+    var customMenuG = Cherry.createMenuHook('附件', {
+        icon: {
+            type: 'svg',
+            content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M4.5 3a2.5 2.5 0 0 1 5 0v9a1.5 1.5 0 0 1-3 0V5a.5.5 0 0 1 1 0v7a.5.5 0 0 0 1 0V3a1.5 1.5 0 1 0-3 0v9a2.5 2.5 0 0 0 5 0V5a.5.5 0 0 1 1 0v7a3.5 3.5 0 1 1-7 0V3z"/></svg>',
+            iconStyle: 'width:16px;height:16px;vertical-align:-2px;',
+        },
+        onClick: function () {
+            uploadAttachments();
+        },
     });
 
     let customMenuTools =  Cherry.createMenuHook('工具',  {
@@ -197,11 +200,12 @@ $(function () {
                     needWhitespace: false, // 是否必须有前后空格
                 },
                 mathBlock: {
-                    engine: 'MathJax', // katex或MathJax
-                    src: 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js', // 如果使用MathJax plugins，则需要使用该url通过script标签引入
+                    // 使用本地 katex（模板已加载 /static/katex/katex.min.js + css）：
+                    // 同步渲染、无 CDN 依赖，且支持 \Huge 等字号命令与 \color/\textcolor 颜色命令（MathJax 不支持字号命令）
+                    engine: 'katex',
                 },
                 inlineMath: {
-                    engine: 'MathJax', // katex或MathJax
+                    engine: 'katex',
                 },
                 emoji: {
                     useUnicode: false,
@@ -214,14 +218,6 @@ $(function () {
                 // 'header': {
                 //   strict: false
                 // }
-            },
-            customSyntax: {
-                // SyntaxHookClass
-                CustomHook: {
-                    syntaxClass: CustomHookA,
-                    force: false,
-                    after: 'br',
-                },
             },
         },
         toolbars: {
@@ -254,6 +250,7 @@ $(function () {
                 {
                     insert: ['image', 'audio', 'video', 'link', 'hr', 'br', 'code', 'formula', 'toc', 'table', 'pdf', 'word', 'ruby'],
                 },
+                'customMenuGName',
                 'graph',
                 'togglePreview',
                 'settings',
@@ -271,6 +268,7 @@ $(function () {
                 customMenuDName: customMenuD,
                 customMenuEName: customMenuE,
                 customMenuFName: customMenuF,
+                customMenuGName: customMenuG,
                 customMenuToolsName: customMenuTools,
             },
         },
@@ -294,7 +292,9 @@ $(function () {
         //var markdownarea = document.getElementById("markdown_area").value
         var config = Object.assign({}, basicConfig);// { value: markdownarea });// { value: value });不显示获取的初始化值
         window.editor = new Cherry(config);
-        window.editor.getCodeMirror().on('change', (e, detail)=>{
+        // 新版 cherry 使用 CodeMirror6，getCodeMirror() 返回原生 EditorView（无 on 方法），
+        // CM6Adapter（window.editor.editor.editor）提供 CM5 兼容的 change 事件：handler(adapter, changeObj)
+        window.editor.editor.editor.on('change', (e, detail)=>{
             resetEditorChanged(true);
         });
         openLastSelectedNode();
@@ -357,7 +357,7 @@ $(function () {
         var node = window.selectNode;
         var content = window.editor.getMarkdown();
         var html = window.editor.getHtml(true);
-        var markdownTheme = window.editor.getTheme();
+        var markdownTheme = getCherryTheme();
         var version = "";
 
         if (!node) {
@@ -654,9 +654,10 @@ $(function () {
         var body = $("#template-" + $this).html();
         if (body) {
             window.isLoad = true;
-            window.editor.clear();
+            // 新版 cherry 实例不再提供 clear()/setCursor()，改用 setMarkdown 和 Editor 模块的 setCursor
+            window.editor.setMarkdown('');
             window.editor.insertValue(body);
-            window.editor.setCursor({ line: 0, ch: 0 });
+            window.editor.editor.setCursor(0, 0);
             resetEditorChanged(true);
         }
         $("#documentTemplateModal").modal('hide');
@@ -669,6 +670,41 @@ $(function () {
         }
     });
 });
+
+/**
+ * 附件上传：打开编辑页自带的"上传附件"弹窗（与 editor.md 完全相同的交互）。
+ * 弹窗由模板 #uploadAttachModal + WebUploader 实现（拖拽/点击上传、进度条、Vue 附件列表），
+ * 上传的附件绑定到当前文档（doc_id），成功后在弹窗内显示可点击的文件链接。
+ */
+function uploadAttachments() {
+    $("#uploadAttachModal").modal("show");
+}
+
+/**
+ * 获取当前 markdown 主题（新版 cherry 移除了实例方法 getTheme）。
+ * 优先从容器 class 读取，其次读 localStorage，返回形如 theme__default 的完整类名，
+ * 与旧版 getTheme() 返回值保持一致。
+ */
+function getCherryTheme() {
+    var theme = 'default';
+    try {
+        if (window.editor && window.editor.wrapperDom) {
+            var match = /theme__([^\s]+)/.exec(window.editor.wrapperDom.className || '');
+            if (match) {
+                theme = match[1];
+            }
+        }
+        if (theme === 'default') {
+            var localTheme = localStorage.getItem('cherry-theme');
+            if (localTheme) {
+                theme = localTheme;
+            }
+        }
+    } catch (e) {
+        console.log(e);
+    }
+    return 'theme__' + theme;
+}
 
 function myFileUpload(file, callback) {
     // 创建 FormData 对象以便包含要上传的文件

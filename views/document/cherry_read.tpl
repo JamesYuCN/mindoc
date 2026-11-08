@@ -303,7 +303,7 @@
 <script src="{{cdnjs "/static/layer/layer.js"}}" type="text/javascript"></script>
 <script src="{{cdnjs "/static/jstree/3.3.4/jstree.min.js"}}" type="text/javascript"></script>
 <script src="{{cdnjs "/static/nprogress/nprogress.js"}}" type="text/javascript"></script>
-<script src="{{cdnjs "/static/cherry/cherry-markdown.js"}}" type="text/javascript"></script>
+<script src="{{cdnjs "/static/cherry/cherry-markdown.js" "version"}}" type="text/javascript"></script>
 <script src="{{cdnjs "/static/editor.md/lib/highlight/highlight.js"}}" type="text/javascript"></script>
 <script src="{{cdnjs "/static/js/jquery.highlight.js"}}" type="text/javascript"></script>
 <script src="{{cdnjs "/static/js/clipboard.min.js" "version"}}" type="text/javascript"></script>
