@@ -1,6 +1,11 @@
 body {font-size: 12pt !important;}
 .m-manual .manual-left,.navbar {display: none;height: 0 !important; width: 0!important;}
 .m-manual .manual-right{position: relative;left: 0 !important; top: 0;}
+/* 打印时隐藏阅读模式右侧目录栏与收起/展开按钮 */
+.m-manual .manual-article.cherry-markdown .toc,
+.read-toc-expand-tab,
+.read-toc-collapse-btn {display: none !important;}
+.m-manual .manual-article.cherry-markdown .article-content {margin-right: auto !important;}
 .manual-article .article-content{ min-width: initial !important;max-width: initial !important; width: inherit !important;padding: auto !important;}
 pre, code {white-space: pre-wrap !important;word-wrap: break-word !important;}
 a:link, a:visited {color: blue !important;text-decoration: underline !important;}

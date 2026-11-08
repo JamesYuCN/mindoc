@@ -293,6 +293,13 @@ $(function () {
     updateEditLink(window.currentDocumentId);
 
     checkMarkdownTocElement();
+    // 阅读页目录收起/展开（委托绑定，正文重渲染后仍然有效）
+    $(document).on("click", ".read-toc-collapse-btn", function () {
+        setReadTocCollapsed(true);
+    });
+    $(document).on("click", ".read-toc-expand-tab", function () {
+        setReadTocCollapsed(false);
+    });
     $(".view-backtop").on("click", function () {
         $('.manual-right').animate({ scrollTop: '0px' }, 200);
     });
@@ -553,7 +560,9 @@ function checkMarkdownTocElement() {
         toc = $(".toc");
     }
     let articleComment = $("#articleComment");
-    if (toc.length) {
+    // Cherry 阅读页由 setupCherryReadToc 统一处理分栏布局，不再走旧的宽度压缩逻辑
+    var isCherryRead = $("#view_container").hasClass("cherry-markdown");
+    if (toc.length && !isCherryRead) {
         $(".wiki-bottom-left").css("width", "calc(100% - 260px)");
         articleComment.css("width", "calc(100% - 260px)");
         articleComment.css("margin", "30px 0 70px 0");
@@ -562,4 +571,59 @@ function checkMarkdownTocElement() {
         articleComment.css("width", "100%");
         articleComment.css("margin", "30px auto 70px auto;");
     }
+    if (isCherryRead) {
+        setupCherryReadToc();
+    }
+}
+
+/**
+ * Cherry 阅读页目录分栏：
+ * 1. 使用正文中 [[toc]] 生成的目录（div.toc），与 editor.md 的 markdown-toc 行为一致——文档没写 [[toc]] 就不显示目录；
+ * 2. 存在目录时为正文预留右侧空间，目录不再覆盖正文；
+ * 3. 目录标题行右侧提供收起按钮，收起后右缘出现展开按钮，状态持久化到 localStorage。
+ */
+var READ_TOC_COLLAPSED_KEY = "MinDoc::ReadTocCollapsed";
+
+function isReadTocCollapsed() {
+    try {
+        return window.localStorage.getItem(READ_TOC_COLLAPSED_KEY) === "1";
+    } catch (e) {
+        return false;
+    }
+}
+
+function setReadTocCollapsed(collapsed) {
+    $("#view_container").toggleClass("read-toc-collapsed", collapsed);
+    $("body").toggleClass("read-toc-collapsed", collapsed);
+    try {
+        window.localStorage.setItem(READ_TOC_COLLAPSED_KEY, collapsed ? "1" : "0");
+    } catch (e) { }
+    $(window).resize();
+}
+
+function setupCherryReadToc() {
+    var $container = $("#view_container");
+    if ($container.length === 0 || !$container.hasClass("cherry-markdown")) {
+        return;
+    }
+    var $toc = $container.find(".toc").first();
+    var hasToc = $toc.length > 0;
+    $container.toggleClass("has-toc", hasToc);
+    $("body").toggleClass("read-toc-has-toc", hasToc);
+    if (!hasToc) {
+        $(".read-toc-expand-tab").remove();
+        return;
+    }
+    // 目录标题行右侧收起按钮（每次正文重渲染后重新注入）
+    if ($toc.find(".read-toc-collapse-btn").length === 0) {
+        $toc.prepend('<a href="javascript:;" class="read-toc-collapse-btn" title="收起目录"><i class="fa fa-angle-right"></i><span>收起</span></a>');
+    }
+    // 收起后显示在右缘的展开按钮
+    if ($(".read-toc-expand-tab").length === 0) {
+        $("body").append('<a href="javascript:;" class="read-toc-expand-tab" title="展开目录"><i class="fa fa-angle-left"></i><span>目录</span></a>');
+    }
+    // 恢复上次的收起状态（不写回存储）
+    var collapsed = isReadTocCollapsed();
+    $container.toggleClass("read-toc-collapsed", collapsed);
+    $("body").toggleClass("read-toc-collapsed", collapsed);
 }

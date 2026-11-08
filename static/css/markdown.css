@@ -543,22 +543,147 @@ iframe.cherry-dialog-iframe {
     background-color: transparent !important;
 }
 
+/* 阅读模式：Cherry [[toc]] 目录固定为右侧独立分栏，正文预留空间，不再被目录覆盖 */
 .manual-article.cherry-markdown .toc {
     position: fixed;
+    top: 65px;
     right: 50px;
     width: 260px;
+    max-height: calc(100vh - 90px);
     font-size: 12px;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
     border: 1px solid #e8e8e8;
     padding: 10px;
     border-radius: 6px;
+    background: #ffffff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .05);
+    box-sizing: border-box;
+    z-index: 20;
+    -webkit-overflow-scrolling: touch;
 }
 
-/*@media screen and (min-width: 840px) {*/
-/*    .markdown-article {*/
-/*        margin-right: 200px !important;*/
-/*    }*/
-/*}*/
+/* 目录内锚点样式 */
+.manual-article.cherry-markdown .toc a {
+    color: #595959;
+    word-break: break-all;
+}
+
+/* 有目录时为右侧目录栏预留空间（目录宽 260 + 右边距 50 + 间距 30） */
+.manual-article.cherry-markdown.has-toc .article-content {
+    margin-right: 340px !important;
+    min-width: 0;
+}
+
+/* 目录收起后正文占满全部可用宽度 */
+.manual-article.cherry-markdown.has-toc.read-toc-collapsed .article-content {
+    margin-right: auto !important;
+}
+
+/* 收起时隐藏目录 */
+.manual-article.cherry-markdown.read-toc-collapsed .toc {
+    display: none;
+}
+
+/* 目录标题行右侧的收起按钮（图标+文字，避免被误认为勾选框） */
+.read-toc-collapse-btn {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    height: 22px;
+    line-height: 20px;
+    padding: 0 9px;
+    font-size: 12px;
+    color: #999;
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.read-toc-collapse-btn:hover {
+    color: #25b864;
+    border-color: #25b864;
+}
+
+.read-toc-collapse-btn i {
+    margin-right: 3px;
+}
+
+/* 给收起按钮腾出空间，避免与目录标题重叠 */
+.manual-article.cherry-markdown .toc .toc-title {
+    margin-right: 64px;
+}
+
+/* 目录收起后显示在右缘的展开按钮 */
+.read-toc-expand-tab {
+    display: none;
+    position: fixed;
+    right: 0;
+    top: 50%;
+    margin-top: -48px;
+    width: 30px;
+    padding: 12px 5px;
+    text-align: center;
+    font-size: 12px;
+    color: #595959;
+    background: #fafafa;
+    border: 1px solid #d9d9d9;
+    border-right: 0;
+    border-radius: 8px 0 0 8px;
+    box-shadow: -2px 1px 8px rgba(0, 0, 0, .15);
+    /* 必须高于 .manual-right 的 z-index(300)，否则会被正文白色背景盖住导致不可见 */
+    z-index: 400;
+    cursor: pointer;
+}
+
+.read-toc-expand-tab:hover {
+    color: #25b864;
+    background: #f0f0f0;
+}
+
+.read-toc-expand-tab i {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 14px;
+}
+
+.read-toc-expand-tab span {
+    display: block;
+    writing-mode: vertical-lr;
+    letter-spacing: 4px;
+}
+
+/* 仅当文档带目录且处于收起状态时显示展开按钮 */
+body.read-toc-has-toc.read-toc-collapsed .read-toc-expand-tab {
+    display: block;
+}
+
+/* 锚点跳转时避免标题被固定头部遮挡 */
+.manual-article.cherry-markdown .article-body h1,
+.manual-article.cherry-markdown .article-body h2,
+.manual-article.cherry-markdown .article-body h3,
+.manual-article.cherry-markdown .article-body h4,
+.manual-article.cherry-markdown .article-body h5,
+.manual-article.cherry-markdown .article-body h6 {
+    scroll-margin-top: 70px;
+}
+
+/* 窄屏时没有足够空间分栏：隐藏目录与展开按钮，正文占满 */
+@media screen and (max-width: 999px) {
+    .manual-article.cherry-markdown .toc {
+        display: none !important;
+    }
+
+    .manual-article.cherry-markdown.has-toc .article-content {
+        margin-right: auto !important;
+    }
+
+    .read-toc-expand-tab {
+        display: none !important;
+    }
+}
 
 .markdown-article-head {
     width: unset !important;
@@ -569,10 +694,4 @@ iframe.cherry-dialog-iframe {
 .markdown-title {
     padding: unset !important;
     width: 100% !important;
-}
-
-@media screen and (max-width: 839px) {
-    .toc {
-        display: none !important;
-    }
 }
