@@ -13,6 +13,7 @@ import (
 	"github.com/beego/beego/v2/server/web/context"
 
 	// "github.com/mindoc-org/mindoc/conf"
+	"github.com/mindoc-org/mindoc/collab"
 	"github.com/mindoc-org/mindoc/controllers"
 	"github.com/mindoc-org/mindoc/mcp"
 )
@@ -275,6 +276,15 @@ func init() {
 		mcpServer := mcp.NewMCPServer()
 		web.Any("/mcp/*", func(ctx *context.Context) {
 			mcpServer.ServeHTTP().ServeHTTP(ctx.ResponseWriter, ctx.Request)
+		})
+	}
+
+	// 多人协同编辑：token 签发接口与 WebSocket 服务
+	web.Router("/api/:key/collab-token", &controllers.CollabController{}, "get:Token")
+	if web.AppConfig.DefaultBool("enable_collab", false) {
+		collabServer := collab.NewServer()
+		web.Any("/collab/*", func(ctx *context.Context) {
+			collabServer.ServeHTTP(ctx.ResponseWriter, ctx.Request)
 		})
 	}
 }

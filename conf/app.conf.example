@@ -259,3 +259,7 @@ default_lang="zh-cn"
 # MCP Server 功能
 enable_mcp_server="${MINDOC_ENABLE_MCP_SERVER||false}"
 mcp_api_key="${MINDOC_MCP_API_KEY||demo-mcp-api-key}"
+
+# 多人协同编辑（仅对 Cherry Markdown 编辑器的项目生效）
+# 开启后编辑页支持多人实时协同：远程光标、在线用户显示、内容实时同步
+enable_collab="${MINDOC_ENABLE_COLLAB||false}"

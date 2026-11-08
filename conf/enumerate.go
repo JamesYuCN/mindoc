@@ -180,6 +180,11 @@ func GetEnableIframe() bool {
 	return web.AppConfig.DefaultBool("enable_iframe", false)
 }
 
+// 是否启用多人协同编辑（仅对 Cherry Markdown 编辑器的项目生效）
+func GetEnableCollab() bool {
+	return web.AppConfig.DefaultBool("enable_collab", false)
+}
+
 // 同一项目导出线程的并发数
 func GetExportProcessNum() int {
 	exportProcessNum := web.AppConfig.DefaultInt("export_process_num", 1)

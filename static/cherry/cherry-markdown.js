@@ -3893,6 +3893,35 @@
         }
       }]);
     }();
+    // ===== MinDoc collab patch begin: expose @codemirror/state internals for collab.min.js =====
+    // 同一页面内的协同扩展必须复用 Cherry 打包的 @codemirror/state 模块副本，
+    // 否则 StateField 全局 ID 计数器会冲突导致编辑器状态损坏。
+    // 升级 cherry-markdown.js 时需要重新应用此补丁（见 协同编辑部署说明.md）。
+    if (typeof window !== "undefined" && window.__MINDOC_CM_STATE__ === undefined) {
+      window.__MINDOC_CM_STATE__ = {
+        Annotation: Annotation$1,
+        AnnotationType: AnnotationType,
+        ChangeDesc: ChangeDesc,
+        ChangeSet: ChangeSet,
+        CharCategory: CharCategory,
+        Compartment: Compartment,
+        EditorSelection: EditorSelection,
+        EditorState: EditorState,
+        Facet: Facet,
+        MapMode: MapMode,
+        Prec: Prec,
+        Range: Range$2,
+        RangeSet: RangeSet,
+        RangeSetBuilder: RangeSetBuilder,
+        SelectionRange: SelectionRange$1,
+        StateEffect: StateEffect,
+        StateEffectType: StateEffectType,
+        StateField: StateField,
+        Text: Text$3,
+        Transaction: Transaction
+      };
+    }
+    // ===== MinDoc collab patch end =====
   });
   function _toConsumableArray$88(r) {
     return _arrayWithoutHoles$88(r) || _iterableToArray$89(r) || _unsupportedIterableToArray$248(r) || _nonIterableSpread$88();
@@ -16445,6 +16474,20 @@
         class: "cm-trailingSpace"
       })
     }));
+    // ===== MinDoc collab patch begin: expose @codemirror/view internals for collab.min.js =====
+    // 与 __MINDOC_CM_STATE__ 同理：协同扩展必须复用 Cherry 打包的 @codemirror/view 副本。
+    // 升级 cherry-markdown.js 时需要重新应用此补丁（见 协同编辑部署说明.md）。
+    if (typeof window !== "undefined" && window.__MINDOC_CM_VIEW__ === undefined) {
+      window.__MINDOC_CM_VIEW__ = {
+        Decoration: Decoration,
+        EditorView: EditorView,
+        ViewPlugin: ViewPlugin,
+        ViewUpdate: ViewUpdate,
+        WidgetType: WidgetType,
+        keymap: keymap
+      };
+    }
+    // ===== MinDoc collab patch end =====
   });
   function _typeof$370(o) {
     "@babel/helpers - typeof";

@@ -31,6 +31,11 @@
         window.highlightStyle = "{{.HighlightStyle}}";
         window.template = { "getUrl":"{{urlfor "TemplateController.Get"}}", "listUrl" : "{{urlfor "TemplateController.List"}}", "deleteUrl" : "{{urlfor "TemplateController.Delete"}}", "saveUrl" :"{{urlfor "TemplateController.Add"}}"}
         window.lang = {{i18n $.Lang "common.js_lang"}};
+        // 多人协同编辑配置（app.conf: enable_collab）
+        window.ENABLE_COLLAB = '{{conf "enable_collab" }}' === 'true';
+        window.collabTokenURL = "{{urlfor "CollabController.Token" ":key" .Model.Identify}}";
+        window.collabScriptURL = "{{cdnjs "/static/js/collab.min.js" "version"}}";
+        {{if .CollabUser}}window.COLLAB_USER = {{.CollabUser}};{{end}}
     </script>
     <!-- Bootstrap -->
     <link href="{{cdncss "/static/bootstrap/css/bootstrap.min.css"}}" rel="stylesheet">
@@ -42,6 +47,7 @@
     <link href="{{cdncss "/static/css/markdown.css" "version"}}" rel="stylesheet">
     <link href="{{cdncss "/static/cherry/cherry-markdown.css" "version"}}" rel="stylesheet">
     <link href="{{cdncss "/static/katex/katex.min.css"}}" rel="stylesheet">
+    {{if eq (conf "enable_collab") "true"}}<link href="{{cdncss "/static/css/collab.css" "version"}}" rel="stylesheet">{{end}}
     <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
     <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
     <!--[if lt IE 9]>
@@ -389,6 +395,8 @@
 <script src="{{cdnjs "/static/katex/katex.min.js"}}" type="text/javascript"></script>
 <script src="{{cdnjs "/static/js/cherry_markdown.js" "version"}}" type="text/javascript"></script>
 <script src="{{cdnjs "/static/cherry/cherry-markdown.js" "version"}}" type="text/javascript"></script>
+<!-- 协同库 collab.min.js 不能在此静态引入：它依赖 Cherry 初始化后暴露的内部 CM6 模块，
+     由 cherry_markdown.js 在编辑器创建完成后通过 window.collabScriptURL 动态加载 -->
 <script src="{{cdnjs "/static/js/custom-elements-builtin-0.6.5.min.js"}}" type="text/javascript"></script>
 <script src="{{cdnjs "/static/js/x-frame-bypass-1.0.2.js"}}" type="text/javascript"></script>
 <script src="{{cdnjs "/static/mammoth/mammoth.browser.js"}}" type="text/javascript"></script>

@@ -24,6 +24,12 @@ $(function () {
             paramType: '参数类型',
             example: '示例值',
             remark: '备注',
+            collabOnline: '在线协作者',
+            collabEmpty: '当前没有协作者在线',
+            collabSelf: '我',
+            collabStatusConnected: '协同服务已连接，内容实时同步',
+            collabStatusConnecting: '正在连接协同服务…',
+            collabStatusDisconnected: '协同服务未连接，当前为独立编辑',
         },
         'en': {
             placeholder: 'This editor supports Markdown editing, writing on the left and previewing on the right.',
@@ -48,6 +54,12 @@ $(function () {
             paramType: 'Type',
             example: 'Example',
             remark: 'Remark',
+            collabOnline: 'Online collaborators',
+            collabEmpty: 'No collaborator online',
+            collabSelf: 'me',
+            collabStatusConnected: 'Collaboration service connected, content syncing in real time',
+            collabStatusConnecting: 'Connecting to collaboration service...',
+            collabStatusDisconnected: 'Collaboration service disconnected, editing standalone',
         }
     };
 
@@ -168,6 +180,290 @@ $(function () {
         ]
     });
 
+    /**
+     * ========== 多人协同编辑 ==========
+     * 依赖编辑页模板注入的 window.ENABLE_COLLAB / window.collabTokenURL / window.COLLAB_USER，
+     * 以及 collab.min.js 暴露的 window.MindocCollab（该文件必须在 cherry-markdown.js 之后加载）。
+     * 关闭 enable_collab 配置时以下代码全部不生效，行为与单机编辑完全一致。
+     */
+    var collabState = { users: [], status: 'connecting', btn: null, panel: null, panelOpen: false, loadTimer: null };
+    var collabColorPalette = ['#30bced', '#e2574c', '#f4b942', '#6f7dcc', '#8bc34a', '#af7ac5', '#16a085', '#e67e22', '#2c82c9', '#c0392b', '#27ae60', '#d35400', '#7f8c8d', '#9b59b6', '#34495e', '#f39c12'];
+
+    function collabUserColor(memberId) {
+        return collabColorPalette[Math.abs(memberId || 0) % collabColorPalette.length];
+    }
+
+    function escapeCollabHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    var customMenuCollab = Cherry.createMenuHook('协作', {
+        icon: {
+            type: 'svg',
+            content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M5.5 7.5a2.75 2.75 0 1 0 0-5.5 2.75 2.75 0 0 0 0 5.5zm-4 7C1.5 12 3.2 10.5 5.5 10.5S9.5 12 9.5 14.5v.5h-8v-.5zM11 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm-.4 3.1c1.9.2 3.4 1.5 3.4 3.4v.5h-2.6v-.5c0-1.3-.3-2.4-.8-3.4z"/></svg>',
+            iconStyle: 'width:16px;height:16px;vertical-align:-2px;',
+        },
+        onClick: function () {
+            toggleCollabPanel();
+        },
+        afterInit: function (btnDom) {
+            btnDom.classList.add('mindoc-collab-btn', 'connecting');
+            var badge = document.createElement('span');
+            badge.className = 'mindoc-collab-count';
+            badge.style.display = 'none';
+            btnDom.appendChild(badge);
+            collabState.btn = btnDom;
+            refreshCollabBadge();
+        }
+    });
+
+    function refreshCollabBadge() {
+        if (!collabState.btn) return;
+        var badge = collabState.btn.querySelector('.mindoc-collab-count');
+        if (!badge) return;
+        collabState.btn.classList.remove('connected', 'disconnected', 'connecting');
+        var cls = 'connecting';
+        if (collabState.status === 'connected') {
+            cls = 'connected';
+        } else if (collabState.status === 'disconnected' || collabState.status === 'error') {
+            cls = 'disconnected';
+        }
+        collabState.btn.classList.add(cls);
+        var count = collabState.users.length;
+        badge.textContent = count > 0 ? String(count) : '';
+        badge.style.display = count > 0 ? 'inline-block' : 'none';
+    }
+
+    function ensureCollabPanel() {
+        if (collabState.panel) return collabState.panel;
+        var panel = document.createElement('div');
+        panel.className = 'mindoc-collab-panel';
+        document.body.appendChild(panel);
+        collabState.panel = panel;
+        // 点击面板与按钮以外的区域时关闭面板
+        $(document).on('mousedown.collab', function (e) {
+            if (!collabState.panelOpen) return;
+            if (panel.contains(e.target)) return;
+            if (collabState.btn && collabState.btn.contains(e.target)) return;
+            hideCollabPanel();
+        });
+        return panel;
+    }
+
+    function toggleCollabPanel() {
+        if (collabState.panelOpen) {
+            hideCollabPanel();
+            return;
+        }
+        var panel = ensureCollabPanel();
+        renderCollabPanel();
+        var rect = collabState.btn.getBoundingClientRect();
+        panel.style.display = 'block';
+        var pw = panel.offsetWidth;
+        panel.style.left = Math.max(8, Math.min(rect.left + rect.width / 2 - pw / 2, window.innerWidth - pw - 8)) + 'px';
+        panel.style.top = (rect.bottom + 6) + 'px';
+        collabState.panelOpen = true;
+    }
+
+    function hideCollabPanel() {
+        if (collabState.panel) {
+            collabState.panel.style.display = 'none';
+        }
+        collabState.panelOpen = false;
+    }
+
+    function renderCollabPanel() {
+        var panel = ensureCollabPanel();
+        var loc = editormdLocales[lang];
+        var html = '<div class="mindoc-collab-panel-title">' + loc.collabOnline + ' (' + collabState.users.length + ')</div>';
+        html += '<div class="mindoc-collab-panel-body">';
+        if (!collabState.users.length) {
+            html += '<div class="mindoc-collab-panel-empty">' + loc.collabEmpty + '</div>';
+        } else {
+            for (var i = 0; i < collabState.users.length; i++) {
+                var u = collabState.users[i];
+                html += '<div class="mindoc-collab-user" title="' + escapeCollabHtml(u.name) + '">' +
+                    '<span class="dot" style="background:' + (u.color || '#30bced') + '"></span>' +
+                    '<span>' + escapeCollabHtml(u.name) + '</span>' +
+                    (u.self ? '<span class="self-flag">' + loc.collabSelf + '</span>' : '') +
+                    '</div>';
+            }
+        }
+        html += '</div>';
+        var statusCls = 'connecting';
+        var statusText = loc.collabStatusConnecting;
+        if (collabState.status === 'connected') {
+            statusCls = '';
+            statusText = loc.collabStatusConnected;
+        } else if (collabState.status === 'disconnected' || collabState.status === 'error') {
+            statusCls = 'disconnected';
+            statusText = loc.collabStatusDisconnected;
+        }
+        html += '<div class="mindoc-collab-panel-status ' + statusCls + '"><span class="status-dot"></span>' + statusText + '</div>';
+        panel.innerHTML = html;
+    }
+
+    function handleCollabUsers(users) {
+        collabState.users = users || [];
+        handleCollabSavedVersions(collabState.users);
+        refreshCollabBadge();
+        if (collabState.panelOpen) renderCollabPanel();
+    }
+
+    /**
+     * 其他协作者保存成功后通过 awareness 广播最新版本号，
+     * 本地同步 documentCategory 中的 version 缓存，避免下次保存触发 6005 冲突。
+     */
+    function handleCollabSavedVersions(users) {
+        if (!window.collabInstance) return;
+        var best = null;
+        for (var i = 0; i < users.length; i++) {
+            var sv = users[i].savedVersion;
+            if (sv && sv.docId == window.collabInstance.docId) {
+                if (!best || sv.at > best.at) best = sv;
+            }
+        }
+        if (best) updateDocumentVersionCache(best.docId, best.version);
+    }
+
+    function updateDocumentVersionCache(docId, version) {
+        if (!version) return;
+        for (var i in window.documentCategory) {
+            if (window.documentCategory[i].id == docId) {
+                window.documentCategory[i].version = version;
+                break;
+            }
+        }
+        if (window.selectNode && window.selectNode.id == docId) {
+            window.selectNode.version = version;
+        }
+    }
+
+    /**
+     * 等待 Cherry 暴露内部 CM6 模块（new Cherry() 后即就绪，此处做防御性轮询）。
+     */
+    function waitForCollabDeps(timeout) {
+        return new Promise(function (resolve) {
+            var start = Date.now();
+            (function check() {
+                if (window.__MINDOC_CM_STATE__ && window.__MINDOC_CM_VIEW__) {
+                    resolve(true);
+                    return;
+                }
+                if (Date.now() - start > timeout) {
+                    resolve(false);
+                    return;
+                }
+                setTimeout(check, 50);
+            })();
+        });
+    }
+
+    /**
+     * 动态加载协同库。collab.min.js 依赖 Cherry 内部 CM6 模块（惰性初始化），
+     * 必须在 new Cherry() 之后加载，不能在页面头部静态引入。
+     */
+    function loadCollabScript() {
+        if (typeof MindocCollab === 'function') {
+            return Promise.resolve();
+        }
+        return new Promise(function (resolve, reject) {
+            var s = document.createElement('script');
+            s.src = window.collabScriptURL || '/static/js/collab.min.js';
+            s.onload = function () { resolve(); };
+            s.onerror = function () { reject(new Error('load collab.min.js failed')); };
+            document.head.appendChild(s);
+        });
+    }
+
+    /**
+     * 初始化协同编辑会话（编辑器实例创建完成后调用），完成后回调 onReady。
+     * 协同依赖不可用时回退为单机编辑并继续加载文档。
+     */
+    function initCollab(onReady) {
+        if (!window.ENABLE_COLLAB || !window.editor) {
+            if (onReady) onReady();
+            return;
+        }
+        waitForCollabDeps(3000).then(function (depsReady) {
+            if (!depsReady) {
+                console.warn('[mindoc-collab] Cherry CM6 模块不可用，回退为单机编辑');
+                if (onReady) onReady();
+                return;
+            }
+            loadCollabScript().then(function () {
+                if (typeof MindocCollab !== 'function') {
+                    console.warn('[mindoc-collab] MindocCollab 未定义，回退为单机编辑');
+                    if (onReady) onReady();
+                    return;
+                }
+                createCollabInstance();
+                if (onReady) onReady();
+            }).catch(function (e) {
+                console.warn('[mindoc-collab] 协同库加载失败，回退为单机编辑', e);
+                if (onReady) onReady();
+            });
+        });
+    }
+
+    function createCollabInstance() {
+        var name = (window.COLLAB_USER && window.COLLAB_USER.name) || 'Anonymous';
+        var memberId = (window.COLLAB_USER && window.COLLAB_USER.memberId) || 0;
+        var wsBase = (window.baseUrl || window.location.origin).replace(/^http(s?):\/\//i, 'ws$1://');
+        window.collabInstance = new MindocCollab({
+            view: window.editor.getCodeMirror(),
+            serverUrl: wsBase + '/collab/' + window.book.identify,
+            identify: window.book.identify,
+            getToken: function (docId) {
+                return new Promise(function (resolve, reject) {
+                    $.get(window.collabTokenURL, { doc_id: docId }).done(function (res) {
+                        if (res && res.errcode === 0 && res.data && res.data.token) {
+                            resolve(res.data.token);
+                        } else {
+                            reject(new Error(res && res.message ? res.message : 'collab token error'));
+                        }
+                    }).fail(function (xhr, status, err) {
+                        reject(err || status || 'request failed');
+                    });
+                });
+            },
+            user: { name: name, color: collabUserColor(memberId) },
+            getAdapter: function () {
+                return window.editor.editor.editor;
+            },
+            onUsersChange: handleCollabUsers,
+            onStatus: function (status) {
+                collabState.status = status;
+                refreshCollabBadge();
+                if (collabState.panelOpen) renderCollabPanel();
+            },
+            onSynced: function () {
+                scheduleCollabLoadReset();
+            }
+        });
+        window.addEventListener('beforeunload', function () {
+            try {
+                if (window.collabInstance) window.collabInstance.destroy();
+            } catch (e) {
+                console.log(e);
+            }
+        });
+    }
+
+    /**
+     * 协同模式下初始内容同步完成后延迟清除 isLoad，
+     * 避免远程同步的内容被误标记为"未保存"。
+     */
+    function scheduleCollabLoadReset() {
+        if (collabState.loadTimer) clearTimeout(collabState.loadTimer);
+        collabState.loadTimer = setTimeout(function () {
+            window.isLoad = false;
+            collabState.loadTimer = null;
+        }, 1200);
+    }
+
 
     var basicConfig = {
         id: 'manualEditorContainer',
@@ -221,12 +517,13 @@ $(function () {
             },
         },
         toolbars: {
-            toolbar: [
-                'customMenuCName',
-                'customMenuDName',
-                'customMenuBName',
-                'customMenuEName',
-                'undo',
+            toolbar: (function () {
+                var items = [
+                    'customMenuCName',
+                    'customMenuDName',
+                    'customMenuBName',
+                    'customMenuEName',
+                    'undo',
                 'redo',
                 'bold',
                 'italic',
@@ -258,7 +555,12 @@ $(function () {
                 'export',
                 'customMenuFName',
                 'customMenuToolsName'
-            ],
+                ];
+                if (window.ENABLE_COLLAB) {
+                    items.splice(2, 0, 'collabMenuName');
+                }
+                return items;
+            })(),
             bubble: ['bold', 'italic', 'underline', 'strikethrough', 'sub', 'sup', 'quote', 'ruby', '|', 'size', 'color'], // array or false
             sidebar: ['mobilePreview', 'copy', 'codeTheme', 'theme'],
             customMenu: {
@@ -270,6 +572,7 @@ $(function () {
                 customMenuFName: customMenuF,
                 customMenuGName: customMenuG,
                 customMenuToolsName: customMenuTools,
+                collabMenuName: customMenuCollab,
             },
         },
         drawioIframeUrl: '/static/cherry/drawio_demo.html',
@@ -297,7 +600,10 @@ $(function () {
         window.editor.editor.editor.on('change', (e, detail)=>{
             resetEditorChanged(true);
         });
-        openLastSelectedNode();
+        // 协同初始化（含依赖等待与动态加载）完成后再加载文档，保证首个文档走协同房间
+        initCollab(function () {
+            openLastSelectedNode();
+        });
     });
 
     /***
@@ -316,9 +622,18 @@ $(function () {
                 window.isLoad = true;
                 try {
                     window.editor.setTheme(res.data.markdown_theme);
-                    window.editor.setMarkdown(res.data.markdown);
                 } catch (e) {
                     console.log(e);
+                }
+                if (window.ENABLE_COLLAB && window.collabInstance) {
+                    // 协同模式：内容通过 Yjs 房间同步，编辑器由 yCollab 驱动，不直接 setMarkdown
+                    window.collabInstance.switchDoc(res.data.doc_id, res.data.markdown);
+                } else {
+                    try {
+                        window.editor.setMarkdown(res.data.markdown);
+                    } catch (e) {
+                        console.log(e);
+                    }
                 }
                 var node = { "id": res.data.doc_id, 'parent': res.data.parent_id === 0 ? '#' : res.data.parent_id, "text": res.data.doc_name, "identify": res.data.identify, "version": res.data.version };
                 pushDocumentCategory(node);
@@ -407,11 +722,20 @@ $(function () {
                             window.documentCategory[i].version = res.data.version;
                         }
                     });
+                    if (window.ENABLE_COLLAB && window.collabInstance && res.data && res.data.version) {
+                        // 向房间内其他客户端广播最新版本号
+                        window.collabInstance.setSavedVersion(doc_id, res.data.version);
+                    }
                     if (typeof callback === "function") {
                         callback();
                     }
 
                 } else if (res.errcode === 6005) {
+                    if (window.ENABLE_COLLAB && window.collabInstance) {
+                        // 协同模式下内容已通过 CRDT 收敛，版本冲突只是其他协作者刚保存过，自动覆盖重试
+                        saveDocument(true, callback);
+                        return;
+                    }
                     var confirmIndex = layer.confirm(editormdLocales[lang].overrideModified, {
                         btn: [editormdLocales[lang].confirm, editormdLocales[lang].cancel] // 按钮
                     }, function () {

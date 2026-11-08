@@ -439,6 +439,17 @@ func (c *DocumentController) Edit() {
 	}
 
 	c.Data["SelectedDocId"] = selectedDocId
+
+	// 多人协同编辑：注入当前用户显示信息（仅 Cherry 编辑器项目且启用协同时）
+	if conf.GetEnableCollab() && bookResult.Editor == EditorCherryMarkdown && c.Member != nil && c.Member.MemberId > 0 {
+		name := c.Member.RealName
+		if name == "" {
+			name = c.Member.Account
+		}
+		if cu, err := json.Marshal(map[string]interface{}{"memberId": c.Member.MemberId, "name": name}); err == nil {
+			c.Data["CollabUser"] = template.JS(string(cu))
+		}
+	}
 }
 
 // 创建一个文档
