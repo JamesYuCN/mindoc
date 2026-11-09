@@ -453,15 +453,18 @@ $(function () {
     }
 
     /**
-     * 协同模式下初始内容同步完成后延迟清除 isLoad，
-     * 避免远程同步的内容被误标记为"未保存"。
+     * 协同模式下内容同步期间保持加载状态：
+     * 加载/切换文档时置 collabLoading，防止清空旧内容与房间同步回放触发的多次 change 事件
+     * 被误标记为"未保存"（isLoad 只能消费一次，扛不住多次事件）。
+     * @param {number} delay 多久后恢复可标记状态（默认 1200ms，切换文档时传 5000ms 兜底）
      */
-    function scheduleCollabLoadReset() {
+    function scheduleCollabLoadReset(delay) {
         if (collabState.loadTimer) clearTimeout(collabState.loadTimer);
         collabState.loadTimer = setTimeout(function () {
             window.isLoad = false;
+            window.collabLoading = false;
             collabState.loadTimer = null;
-        }, 1200);
+        }, delay || 1200);
     }
 
 
@@ -626,7 +629,11 @@ $(function () {
                     console.log(e);
                 }
                 if (window.ENABLE_COLLAB && window.collabInstance) {
-                    // 协同模式：内容通过 Yjs 房间同步，编辑器由 yCollab 驱动，不直接 setMarkdown
+                    // 协同模式：内容通过 Yjs 房间同步，编辑器由 yCollab 驱动，不直接 setMarkdown。
+                    // 加载期间（清空旧内容 + 房间同步回放）会触发多次 change 事件，
+                    // 置 collabLoading 防止被误标记为"未保存"；5 秒兜底防止同步卡死时脏标记永久失效
+                    window.collabLoading = true;
+                    scheduleCollabLoadReset(5000);
                     window.collabInstance.switchDoc(res.data.doc_id, res.data.markdown);
                 } else {
                     try {
@@ -762,12 +769,15 @@ $(function () {
      * @param $is_change
      */
     function resetEditorChanged($is_change) {
-        if ($is_change && !window.isLoad) {
+        if ($is_change && !window.isLoad && !window.collabLoading) {
             $("#markdown-save").removeClass('disabled').addClass('change');
         } else {
             $("#markdown-save").removeClass('change').addClass('disabled');
         }
-        window.isLoad = false;
+        // 协同加载期间不消费 isLoad（清空旧内容和同步回放会触发多次 change 事件）
+        if (!window.collabLoading) {
+            window.isLoad = false;
+        }
     }
 
     /**
