@@ -173,6 +173,98 @@ func (item *Document) RecursiveDocument(docId int) error {
 	return nil
 }
 
+// MigrateToBook 将文档及其全部子文档迁移到另一个项目。
+// 根文档将成为目标项目的顶级文档并排到最后（子文档保持原有相对顺序）；
+// 与目标项目已有文档冲突的标识(identify)会自动追加时间后缀。返回迁移的文档数量。
+func (item *Document) MigrateToBook(docId, sourceBookId, targetBookId int) (int, error) {
+	if docId <= 0 || sourceBookId <= 0 || targetBookId <= 0 || sourceBookId == targetBookId {
+		return 0, ErrInvalidParameter
+	}
+
+	o := orm.NewOrm()
+
+	root, err := item.Find(docId)
+	if err != nil {
+		return 0, err
+	}
+	if root.BookId != sourceBookId {
+		return 0, ErrInvalidParameter
+	}
+
+	// 读取源项目全部文档的 id/parent_id/identify，在内存中求子树
+	var docs []*Document
+	_, err = o.QueryTable(item.TableNameWithPrefix()).Filter("book_id", sourceBookId).
+		All(&docs, "document_id", "parent_id", "identify")
+	if err != nil {
+		return 0, err
+	}
+
+	childrenMap := make(map[int][]int)
+	identifyMap := make(map[int]string)
+	for _, doc := range docs {
+		childrenMap[doc.ParentId] = append(childrenMap[doc.ParentId], doc.DocumentId)
+		identifyMap[doc.DocumentId] = doc.Identify
+	}
+
+	subtreeIds := make([]int, 0, 16)
+	queue := []int{docId}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		subtreeIds = append(subtreeIds, id)
+		queue = append(queue, childrenMap[id]...)
+	}
+
+	tx, err := o.Begin()
+	if err != nil {
+		return 0, err
+	}
+
+	// 目标项目顶级文档数量，用于把根文档排到最后
+	rootCount, err := tx.QueryTable(item.TableNameWithPrefix()).
+		Filter("book_id", targetBookId).Filter("parent_id", 0).Count()
+	if err != nil {
+		_ = tx.Rollback()
+		return 0, err
+	}
+
+	for _, id := range subtreeIds {
+		params := orm.Params{"book_id": targetBookId}
+		// 标识在目标项目冲突时追加时间后缀，保证 (book_id, identify) 唯一键不被破坏
+		if identify := identifyMap[id]; identify != "" {
+			if tx.QueryTable(item.TableNameWithPrefix()).
+				Filter("book_id", targetBookId).Filter("identify", identify).Exist() {
+				params["identify"] = fmt.Sprintf("%s-%s", identify, strconv.FormatInt(time.Now().UnixNano(), 32))
+			}
+		}
+		if id == docId {
+			// 根文档成为目标项目的顶级文档并排到最后
+			params["parent_id"] = 0
+			params["order_sort"] = int(rootCount) + 1
+		}
+		if _, err := tx.QueryTable(item.TableNameWithPrefix()).Filter("document_id", id).Update(params); err != nil {
+			_ = tx.Rollback()
+			return 0, err
+		}
+		// 清理旧缓存（按 ID 与 按旧项目+标识两个键）
+		cache.Delete("Document.Id." + strconv.Itoa(id))
+		if identifyMap[id] != "" {
+			cache.Delete(fmt.Sprintf("Document.BookId.%d.Identify.%s", sourceBookId, identifyMap[id]))
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return 0, err
+	}
+
+	// 重置两个项目的文档数量统计
+	NewBook().ResetDocumentNumber(sourceBookId)
+	NewBook().ResetDocumentNumber(targetBookId)
+
+	return len(subtreeIds), nil
+}
+
 // 将文档写入缓存
 func (item *Document) PutToCache() {
 	go func(m Document) {

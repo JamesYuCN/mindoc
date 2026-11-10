@@ -240,6 +240,8 @@ func init() {
 	web.Router("/api/upload", &controllers.DocumentController{}, "post:Upload")
 	web.Router("/api/:key/create", &controllers.DocumentController{}, "post:Create")
 	web.Router("/api/:key/delete", &controllers.DocumentController{}, "post:Delete")
+	web.Router("/api/:key/migrate/list", &controllers.DocumentController{}, "get:MigrateList")
+	web.Router("/api/:key/migrate", &controllers.DocumentController{}, "post:Migrate")
 	web.Router("/api/:key/content/?:id", &controllers.DocumentController{}, "*:Content")
 	web.Router("/api/:key/compare/:id", &controllers.DocumentController{}, "*:Compare")
 	web.Router("/api/search/user/:key", &controllers.SearchController{}, "*:User")

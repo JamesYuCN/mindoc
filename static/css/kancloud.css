@@ -543,7 +543,8 @@ table>tbody>tr:hover {
     min-width: 980px;
     max-width: 90%;
     padding: 10px 20px;
-    margin-left: auto !important;
+    /* 正文左对齐贴近左侧项目目录，留 30px 空白避免贴得太近；窄屏时 max-width 不生效，视觉与原来一致 */
+    margin-left: 30px !important;
     margin-right: auto !important
 }
 

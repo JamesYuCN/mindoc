@@ -705,6 +705,47 @@ func (book *Book) ResetDocumentNumber(bookId int) {
 	}
 }
 
+// MigratableBook 迁移文档时可选的目标项目。
+type MigratableBook struct {
+	BookId   int    `json:"book_id" orm:"column(book_id)"`
+	BookName string `json:"book_name" orm:"column(book_name)"`
+	Identify string `json:"identify" orm:"column(identify)"`
+}
+
+// FindMigratableBooks 查询用户可写入（创始人/管理者/编辑者，含团队成员身份）且非当前项目的项目列表。
+func (book *Book) FindMigratableBooks(memberId int, excludeIdentify string, isAdministrator bool) ([]MigratableBook, error) {
+	o := orm.NewOrm()
+
+	books := make([]MigratableBook, 0)
+
+	if isAdministrator {
+		_, err := o.QueryTable(book.TableNameWithPrefix()).
+			Exclude("identify", excludeIdentify).
+			OrderBy("book_name").
+			All(&books, "book_id", "book_name", "identify")
+		return books, err
+	}
+
+	sql := `SELECT b.book_id, b.book_name, b.identify
+		FROM md_books AS b
+		JOIN md_relationship AS r ON r.book_id = b.book_id AND r.member_id = ? AND r.role_id <= ?
+		WHERE b.identify <> ?
+		UNION
+		SELECT b.book_id, b.book_name, b.identify
+		FROM md_books AS b
+		JOIN md_team_relationship AS mtr ON mtr.book_id = b.book_id AND mtr.role_id <= ?
+		JOIN md_team_member AS mtm ON mtm.team_id = mtr.team_id AND mtm.member_id = ?
+		WHERE b.identify <> ?
+		ORDER BY book_name`
+
+	_, err := o.Raw(sql,
+		memberId, int(conf.BookEditor), excludeIdentify,
+		int(conf.BookEditor), memberId, excludeIdentify,
+	).QueryRows(&books)
+
+	return books, err
+}
+
 // 导入zip项目
 func (book *Book) ImportBook(zipPath string, lang string) error {
 	if !filetil.FileExists(zipPath) {

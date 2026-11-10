@@ -56,6 +56,31 @@
 <!-- 附件列表（editor.js Vue 实例依赖） -->
 <div id="attachList"></div>
 
+<!-- 迁移文档弹窗（与 cherry_markdown_edit_template.tpl 保持一致） -->
+<div class="modal fade" id="migrateDocumentModal" tabindex="-1" role="dialog" aria-labelledby="migrateDocumentModalLabel">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title" id="migrateDocumentModalLabel">迁移文档</h4>
+            </div>
+            <div class="modal-body">
+                <p id="migrateDocName" style="word-break: break-all;"></p>
+                <div class="form-group">
+                    <label for="migrateTargetBook">迁移到项目</label>
+                    <select id="migrateTargetBook" class="form-control"></select>
+                </div>
+                <p class="text-muted" style="font-size: 12px;">该文档及其所有子文档将被移动到所选项目，并作为顶级文档排在末尾。</p>
+            </div>
+            <div class="modal-footer">
+                <span id="migrate-error-message" class="error-message"></span>
+                <button type="button" class="btn btn-default" data-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="btnMigrateDocument" data-loading-text="迁移中...">迁移</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script type="text/javascript">
     // ===== 复刻编辑页模板注入的全局变量 =====
     window.treeCatalog = null;
@@ -69,7 +94,17 @@
         { "id": 1, "parent": "#", "text": "协同测试", "identify": "doc1", "version": 100, state: { opened: true } },
         { "id": 2, "parent": "#", "text": "第二篇文档", "identify": "doc2", "version": 100 }
     ];
-    window.book = { "identify": "testbook", "auto_save": 0 };
+    window.book = (function () {
+        // 支持通过 URL 参数 role 模拟不同角色（0创始人 1管理员 2编辑者 3观察者 4未指定/超管）
+        var params = new URLSearchParams(window.location.search);
+        // canmigrate 参数模拟服务端下发的迁移权限标记（不传则不定义，走角色回退逻辑）
+        if (params.get("canmigrate") === "1") {
+            window.CAN_MIGRATE = true;
+        } else if (params.get("canmigrate") === "0") {
+            window.CAN_MIGRATE = false;
+        }
+        return { "identify": "testbook", "auto_save": 0, "role_id": parseInt(params.get("role") || "0", 10) };
+    })();
     window.selectedDocId = 1;
     window.selectNode = null;
     window.deleteURL = "#";
@@ -86,6 +121,9 @@
     window.ENABLE_COLLAB = true;
     window.collabTokenURL = "/api/testbook/collab-token";
     window.collabScriptURL = "/static/js/collab.min.js";
+    // 迁移文档接口（模拟）
+    window.migrateURL = "/api/testbook/migrate";
+    window.migrateListURL = "/api/testbook/migrate/list";
     (function () {
         var params = new URLSearchParams(window.location.search);
         window.COLLAB_USER = {

@@ -881,6 +881,90 @@ $(function () {
     });
 
     /**
+     * 打开迁移文档弹窗：选择目标项目后，将文档及其全部子文档迁移过去。
+     * 仅项目创始人/管理者可见该菜单（见目录树右键菜单）。
+     */
+    function openMigrateDocumentDialog(node) {
+        window.migrateNodeId = node.id;
+        $("#migrateDocName").text("将迁移文档「" + node.text + "」及其所有子文档。");
+        $("#migrate-error-message").hide().text("");
+        $("#btnMigrateDocument").button("reset");
+        var $select = $("#migrateTargetBook").prop("disabled", true).empty()
+            .append('<option value="">加载中...</option>');
+        $("#migrateDocumentModal").modal("show");
+
+        $.get(window.migrateListURL, { "identify": window.book.identify }).done(function (res) {
+            if (res.errcode === 0 && res.data && res.data.length > 0) {
+                $select.empty();
+                $.each(res.data, function (i, book) {
+                    $select.append($("<option></option>").val(book.book_id).text(book.book_name));
+                });
+                $select.prop("disabled", false);
+            } else {
+                $select.empty().append('<option value="">没有可迁移的项目</option>');
+            }
+        }).fail(function () {
+            $select.empty().append('<option value="">加载项目列表失败</option>');
+        });
+    }
+
+    /**
+     * 从本地目录数据中移除指定文档及其子文档。
+     */
+    function removeDocumentCategorySubtree(docId) {
+        var childrenMap = {};
+        $.each(window.documentCategory, function (i, item) {
+            var parent = (item.parent === "#" || item.parent === undefined) ? 0 : parseInt(item.parent, 10);
+            childrenMap[parent] = childrenMap[parent] || [];
+            childrenMap[parent].push(item.id);
+        });
+        var ids = {};
+        var queue = [parseInt(docId, 10)];
+        while (queue.length > 0) {
+            var id = queue.shift();
+            ids[id] = true;
+            if (childrenMap[id]) {
+                queue = queue.concat(childrenMap[id]);
+            }
+        }
+        window.documentCategory = window.documentCategory.filter(function (item) {
+            return !ids[item.id];
+        });
+    }
+
+    $("#btnMigrateDocument").on("click", function () {
+        var targetBookId = parseInt($("#migrateTargetBook").val(), 10);
+        if (!targetBookId) {
+            $("#migrate-error-message").text("请选择目标项目").show();
+            return;
+        }
+        var $btn = $(this).button("loading");
+        $.post(window.migrateURL, {
+            "identify": window.book.identify,
+            "doc_id": window.migrateNodeId,
+            "target_book_id": targetBookId
+        }).done(function (res) {
+            $btn.button("reset");
+            if (res.errcode === 0) {
+                $("#migrateDocumentModal").modal("hide");
+                var count = (res.data && res.data.count) || 1;
+                layer.msg("迁移成功，共迁移 " + count + " 篇文档");
+                var node = window.treeCatalog.get_node(window.migrateNodeId);
+                if (node) {
+                    // 删除目录树节点会触发 delete_node 事件，自动重新选中可编辑的文档
+                    window.treeCatalog.delete_node(node);
+                }
+                removeDocumentCategorySubtree(window.migrateNodeId);
+            } else {
+                $("#migrate-error-message").text(res.message || "迁移失败").show();
+            }
+        }).fail(function () {
+            $btn.button("reset");
+            $("#migrate-error-message").text("迁移失败，请稍后重试").show();
+        });
+    });
+
+    /**
      * 文档目录树
      */
     // 为目录树节点注入 href，使鼠标悬浮时浏览器状态栏显示对应编辑 URL
@@ -910,45 +994,67 @@ $(function () {
         "contextmenu": {
             show_at_node: false,
             select_node: false,
-            "items": {
-                "添加文档": {
-                    "separator_before": false,
-                    "separator_after": true,
-                    "_disabled": false,
-                    "label": window.editormdLocales[window.lang].addDoc,//"添加文档",
-                    "icon": "fa fa-plus",
-                    "action": function (data) {
-                        var inst = $.jstree.reference(data.reference),
-                            node = inst.get_node(data.reference);
+            "items": (function () {
+                var items = {
+                    "添加文档": {
+                        "separator_before": false,
+                        "separator_after": true,
+                        "_disabled": false,
+                        "label": window.editormdLocales[window.lang].addDoc,//"添加文档",
+                        "icon": "fa fa-plus",
+                        "action": function (data) {
+                            var inst = $.jstree.reference(data.reference),
+                                node = inst.get_node(data.reference);
 
-                        openCreateCatalogDialog(node);
+                            openCreateCatalogDialog(node);
+                        }
+                    },
+                    "编辑": {
+                        "separator_before": false,
+                        "separator_after": true,
+                        "_disabled": false,
+                        "label": window.editormdLocales[window.lang].edit,
+                        "icon": "fa fa-edit",
+                        "action": function (data) {
+                            var inst = $.jstree.reference(data.reference);
+                            var node = inst.get_node(data.reference);
+                            openEditCatalogDialog(node);
+                        }
+                    },
+                    "删除": {
+                        "separator_before": false,
+                        "separator_after": true,
+                        "_disabled": false,
+                        "label": window.editormdLocales[window.lang].delete,
+                        "icon": "fa fa-trash-o",
+                        "action": function (data) {
+                            var inst = $.jstree.reference(data.reference);
+                            var node = inst.get_node(data.reference);
+                            openDeleteDocumentDialog(node);
+                        }
                     }
-                },
-                "编辑": {
-                    "separator_before": false,
-                    "separator_after": true,
-                    "_disabled": false,
-                    "label": window.editormdLocales[window.lang].edit,
-                    "icon": "fa fa-edit",
-                    "action": function (data) {
-                        var inst = $.jstree.reference(data.reference);
-                        var node = inst.get_node(data.reference);
-                        openEditCatalogDialog(node);
-                    }
-                },
-                "删除": {
-                    "separator_before": false,
-                    "separator_after": true,
-                    "_disabled": false,
-                    "label": window.editormdLocales[window.lang].delete,
-                    "icon": "fa fa-trash-o",
-                    "action": function (data) {
-                        var inst = $.jstree.reference(data.reference);
-                        var node = inst.get_node(data.reference);
-                        openDeleteDocumentDialog(node);
-                    }
+                };
+                // 迁移文档：优先使用服务端下发的权限标记；
+                // 未注入时按角色判断（0创始人/1管理者，4为超级管理员访问非成员项目时的角色值）
+                var canMigrate = typeof window.CAN_MIGRATE !== "undefined"
+                    ? !!window.CAN_MIGRATE
+                    : !!(window.book && (window.book.role_id === 0 || window.book.role_id === 1 || window.book.role_id === 4));
+                if (canMigrate) {
+                    items["迁移"] = {
+                        "separator_before": true,
+                        "separator_after": false,
+                        "_disabled": false,
+                        "label": "迁移",
+                        "icon": "fa fa-exchange",
+                        "action": function (data) {
+                            var inst = $.jstree.reference(data.reference);
+                            var node = inst.get_node(data.reference);
+                            openMigrateDocumentDialog(node);
+                        }
+                    };
                 }
-            }
+                return items;
+            })()
         }
     }).on("ready.jstree", function () {
         window.treeCatalog = $("#sidebar").jstree(true);

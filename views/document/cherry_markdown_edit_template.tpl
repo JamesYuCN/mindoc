@@ -28,6 +28,10 @@
         window.sortURL = "{{urlfor "BookController.SaveSort" ":key" .Model.Identify}}";
         window.historyURL = "{{urlfor "DocumentController.History"}}";
         window.removeAttachURL = "{{urlfor "DocumentController.RemoveAttachment"}}";
+        // 迁移文档（仅项目创始人/管理者/超级管理员可见右键菜单）
+        window.CAN_MIGRATE = {{.CanMigrate}};
+        window.migrateURL = "{{urlfor "DocumentController.Migrate" ":key" .Model.Identify}}";
+        window.migrateListURL = "{{urlfor "DocumentController.MigrateList" ":key" .Model.Identify}}";
         window.highlightStyle = "{{.HighlightStyle}}";
         window.template = { "getUrl":"{{urlfor "TemplateController.Get"}}", "listUrl" : "{{urlfor "TemplateController.List"}}", "deleteUrl" : "{{urlfor "TemplateController.Delete"}}", "saveUrl" :"{{urlfor "TemplateController.Add"}}"}
         window.lang = {{i18n $.Lang "common.js_lang"}};
@@ -137,6 +141,31 @@
             </div>
         </div>
         </form>
+    </div>
+</div>
+
+<!-- 迁移文档弹窗 -->
+<div class="modal fade" id="migrateDocumentModal" tabindex="-1" role="dialog" aria-labelledby="migrateDocumentModalLabel">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title" id="migrateDocumentModalLabel">迁移文档</h4>
+            </div>
+            <div class="modal-body">
+                <p id="migrateDocName" style="word-break: break-all;"></p>
+                <div class="form-group">
+                    <label for="migrateTargetBook">迁移到项目</label>
+                    <select id="migrateTargetBook" class="form-control"></select>
+                </div>
+                <p class="text-muted" style="font-size: 12px;">该文档及其所有子文档将被移动到所选项目，并作为顶级文档排在末尾。</p>
+            </div>
+            <div class="modal-footer">
+                <span id="migrate-error-message" class="error-message"></span>
+                <button type="button" class="btn btn-default" data-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="btnMigrateDocument" data-loading-text="迁移中...">迁移</button>
+            </div>
+        </div>
     </div>
 </div>
 

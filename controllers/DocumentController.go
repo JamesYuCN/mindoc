@@ -395,6 +395,10 @@ func (c *DocumentController) Edit() {
 
 	c.TplName = fmt.Sprintf("document/%s_edit_template.tpl", bookResult.Editor)
 
+	// 迁移文档权限：超级管理员（role_id 为未指定关系）或项目创始人/管理者
+	c.Data["CanMigrate"] = c.Member.IsAdministrator() ||
+		bookResult.RoleId == conf.BookFounder || bookResult.RoleId == conf.BookAdmin
+
 	c.Data["Model"] = bookResult
 
 	r, _ := json.Marshal(bookResult)
@@ -895,6 +899,94 @@ func (c *DocumentController) Delete() {
 	// 重置文档数量统计
 	models.NewBook().ResetDocumentNumber(doc.BookId)
 	c.JsonResult(0, "ok")
+}
+
+// MigrateList 返回迁移文档时可选择的目标项目列表（当前用户可写、且非当前项目）。
+func (c *DocumentController) MigrateList() {
+	c.Prepare()
+
+	identify := c.GetString("identify")
+
+	book, err := models.NewBook().FindByFieldFirst("identify", identify)
+	if err != nil {
+		logs.Error("MigrateList FindByIdentify => ", err)
+		c.JsonResult(6002, i18n.Tr(c.Lang, "message.item_not_exist_or_no_permit"))
+	}
+
+	books, err := models.NewBook().FindMigratableBooks(c.Member.MemberId, book.Identify, c.Member.IsAdministrator())
+	if err != nil {
+		logs.Error("MigrateList FindMigratableBooks => ", err)
+		c.JsonResult(6003, i18n.Tr(c.Lang, "message.failed"))
+	}
+
+	c.JsonResult(0, "ok", books)
+}
+
+// Migrate 将文档及其全部子文档迁移到目标项目（需要源项目管理员权限）。
+func (c *DocumentController) Migrate() {
+	c.Prepare()
+
+	identify := c.GetString("identify")
+	docId, _ := c.GetInt("doc_id", 0)
+	targetBookId, _ := c.GetInt("target_book_id", 0)
+
+	bookId := 0
+
+	// 源项目权限：创始人/管理者（超级管理员放行），与删除文档一致
+	if c.Member.IsAdministrator() {
+		book, err := models.NewBook().FindByFieldFirst("identify", identify)
+		if err != nil {
+			logs.Error("Migrate FindByIdentify => ", err)
+			c.JsonResult(6002, i18n.Tr(c.Lang, "message.item_not_exist_or_no_permit"))
+		}
+		bookId = book.BookId
+	} else {
+		bookResult, err := models.NewBookResult().FindByIdentify(identify, c.Member.MemberId)
+		if err != nil || bookResult.RoleId == conf.BookObserver || bookResult.RoleId == conf.BookEditor {
+			logs.Error("Migrate FindByIdentify => ", err)
+			c.JsonResult(6002, i18n.Tr(c.Lang, "message.item_not_exist_or_no_permit"))
+		}
+		bookId = bookResult.BookId
+	}
+
+	if docId <= 0 || targetBookId <= 0 {
+		c.JsonResult(6001, i18n.Tr(c.Lang, "message.param_error"))
+	}
+
+	targetBook, err := models.NewBook().Find(targetBookId)
+	if err != nil {
+		logs.Error("Migrate Find target book => ", err)
+		c.JsonResult(6001, i18n.Tr(c.Lang, "message.param_error"))
+	}
+	if targetBook.BookId == bookId {
+		c.JsonResult(6004, i18n.Tr(c.Lang, "message.migrate_same_book"))
+	}
+
+	// 目标项目权限：需要可写权限（创始人/管理者/编辑者，含团队成员身份）
+	if !c.Member.IsAdministrator() {
+		roleId, err := models.NewBook().FindForRoleId(targetBookId, c.Member.MemberId)
+		if err != nil || roleId == conf.BookObserver || roleId == conf.BookRoleNoSpecific {
+			logs.Error("Migrate FindForRoleId => ", err)
+			c.JsonResult(6002, i18n.Tr(c.Lang, "message.item_not_exist_or_no_permit"))
+		}
+	}
+
+	doc, err := models.NewDocument().Find(docId)
+	if err != nil {
+		logs.Error("Migrate Find doc => ", err)
+		c.JsonResult(6003, i18n.Tr(c.Lang, "message.failed"))
+	}
+	if doc.BookId != bookId {
+		c.JsonResult(6004, i18n.Tr(c.Lang, "message.param_error"))
+	}
+
+	count, err := doc.MigrateToBook(docId, bookId, targetBookId)
+	if err != nil {
+		logs.Error("Migrate MigrateToBook => ", err)
+		c.JsonResult(6003, i18n.Tr(c.Lang, "message.failed"))
+	}
+
+	c.JsonResult(0, "ok", map[string]interface{}{"count": count})
 }
 
 // 获取文档内容
