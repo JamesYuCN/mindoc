@@ -119,6 +119,8 @@
 
     // ===== 协同编辑配置（通过 URL 参数区分不同用户：?user=A&member=1） =====
     window.ENABLE_COLLAB = true;
+    // iframe 白名单测试开关：?iframe=1 模拟 enable_iframe=true
+    window.IS_ENABLE_IFRAME = new URLSearchParams(window.location.search).get("iframe") === "1";
     window.collabTokenURL = "/api/testbook/collab-token";
     window.collabScriptURL = "/static/js/collab.min.js";
     // 迁移文档接口（模拟）

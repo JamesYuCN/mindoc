@@ -479,6 +479,9 @@ $(function () {
         fileUpload: myFileUpload,
         engine: {
             global: {
+                // Cherry 默认用 DOMPurify 过滤 iframe；跟随 MinDoc 的 enable_iframe 配置放行
+                // （保存的 HTML 由服务端 SafetyProcessor 再次按 enable_iframe 决定是否保留）
+                htmlWhiteList: window.IS_ENABLE_IFRAME ? 'iframe' : '',
                 urlProcessor(url, srcType) {
                     //console.log(`url-processor`, url, srcType);
                     return url;
