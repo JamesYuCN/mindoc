@@ -905,6 +905,11 @@ func (c *DocumentController) Delete() {
 func (c *DocumentController) MigrateList() {
 	c.Prepare()
 
+	// 未登录直接拒绝：匿名时 c.Member 为 nil，不能取其字段
+	if c.Member == nil || c.Member.MemberId <= 0 {
+		c.JsonResult(6001, i18n.Tr(c.Lang, "message.no_permission"))
+	}
+
 	identify := c.GetString("identify")
 
 	book, err := models.NewBook().FindByFieldFirst("identify", identify)
@@ -925,6 +930,11 @@ func (c *DocumentController) MigrateList() {
 // Migrate 将文档及其全部子文档迁移到目标项目（需要源项目管理员权限）。
 func (c *DocumentController) Migrate() {
 	c.Prepare()
+
+	// 未登录直接拒绝：匿名时 c.Member 为 nil，不能取其字段
+	if c.Member == nil || c.Member.MemberId <= 0 {
+		c.JsonResult(6001, i18n.Tr(c.Lang, "message.no_permission"))
+	}
 
 	identify := c.GetString("identify")
 	docId, _ := c.GetInt("doc_id", 0)

@@ -124,6 +124,9 @@ func init() {
 
 	web.Router("/", &controllers.HomeController{}, "*:Index")
 
+	// 文档变更记录页面（供 iframe 嵌入，支持 ?range=last_week|last_month|last_3month|last_6month|last_year|all）
+	web.Router("/changelog", &controllers.ChangeLogController{}, "*:Index")
+
 	web.Router("/login", &controllers.AccountController{}, "*:Login")
 	web.Router("/auth2/redirect/:app", &controllers.AccountController{}, "*:Auth2Redirect")
 	web.Router("/auth2/callback/:app", &controllers.AccountController{}, "*:Auth2Callback")

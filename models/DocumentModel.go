@@ -206,11 +206,17 @@ func (item *Document) MigrateToBook(docId, sourceBookId, targetBookId int) (int,
 		identifyMap[doc.DocumentId] = doc.Identify
 	}
 
+	// visited 集合防止历史脏数据存在循环父子关系时无限循环
+	visited := make(map[int]bool)
 	subtreeIds := make([]int, 0, 16)
 	queue := []int{docId}
 	for len(queue) > 0 {
 		id := queue[0]
 		queue = queue[1:]
+		if visited[id] {
+			continue
+		}
+		visited[id] = true
 		subtreeIds = append(subtreeIds, id)
 		queue = append(queue, childrenMap[id]...)
 	}

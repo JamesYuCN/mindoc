@@ -922,6 +922,10 @@ $(function () {
         var queue = [parseInt(docId, 10)];
         while (queue.length > 0) {
             var id = queue.shift();
+            // 防止历史脏数据存在循环父子关系时无限循环
+            if (ids[id]) {
+                continue;
+            }
             ids[id] = true;
             if (childrenMap[id]) {
                 queue = queue.concat(childrenMap[id]);

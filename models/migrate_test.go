@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	beegocache "github.com/beego/beego/v2/client/cache"
 	"github.com/beego/beego/v2/client/orm"
@@ -155,6 +156,39 @@ func TestMigrateToBook(t *testing.T) {
 	}
 	if dstBook.DocCount != 5 {
 		t.Fatalf("目标项目文档数量期望 5，实际 %d", dstBook.DocCount)
+	}
+}
+
+// TestMigrateToBookCyclicParent 验证历史脏数据存在循环父子关系时不会死循环。
+func TestMigrateToBookCyclicParent(t *testing.T) {
+	setupMigrateTestDB(t)
+
+	src := insertBook(t, "cycle-src", "循环源项目")
+	dst := insertBook(t, "cycle-dst", "循环目标项目")
+
+	a := insertDoc(t, src.BookId, 0, 1, "cycle-a", "文档A")
+	b := insertDoc(t, src.BookId, a.DocumentId, 1, "cycle-b", "文档B")
+
+	o := orm.NewOrm()
+	// 构造循环父子关系：A.parent = B, B.parent = A
+	if _, err := o.QueryTable(NewDocument().TableNameWithPrefix()).
+		Filter("document_id", a.DocumentId).Update(orm.Params{"parent_id": b.DocumentId}); err != nil {
+		t.Fatalf("构造循环父子关系失败: %v", err)
+	}
+
+	done := make(chan int, 1)
+	go func() {
+		count, _ := NewDocument().MigrateToBook(b.DocumentId, src.BookId, dst.BookId)
+		done <- count
+	}()
+
+	select {
+	case count := <-done:
+		if count != 2 {
+			t.Fatalf("循环父子关系下应迁移 2 篇文档，实际 %d", count)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("迁移在循环父子关系下超时（可能存在死循环）")
 	}
 }
 
