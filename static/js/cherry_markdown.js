@@ -972,6 +972,211 @@ $(function () {
     });
 
     /**
+     * 批量重渲染：用当前 Cherry 引擎重新渲染项目下所有文档的 Markdown 并保存（源文内容不变）。
+     * 适用场景：项目默认编辑器由 editor.md 批量切换为 cherry_markdown 后，历史文档的正文 HTML
+     * 仍是旧编辑器保存的版本，目录/样式显示异常；手工逐篇重新保存可修复，此处一次性完成。
+     * 注意：阅读页显示的是发布内容（Release = 保存时的 Content），单纯"发布"不会重新渲染，
+     * 所以批量保存完成后还需要再发布一次项目。
+     */
+    function openBatchRerenderDialog() {
+        if (window.saveing) {
+            layer.msg("正在保存中，请稍候");
+            return;
+        }
+        if ($("#markdown-save").hasClass('change')) {
+            layer.msg("请先保存或放弃当前文档的未保存修改");
+            return;
+        }
+        var docs = window.documentCategory.filter(function (item) {
+            return !(item.a_attr && item.a_attr.disabled);
+        });
+        if (!docs.length) {
+            layer.msg("项目下没有可处理的文档");
+            return;
+        }
+        layer.confirm(
+            "将用 Cherry 重新渲染当前项目下 <b>" + docs.length + "</b> 篇文档的正文 HTML 并保存（Markdown 源文内容不变）。<br>" +
+            "用于修复编辑器切换为 cherry 后目录/样式显示异常的历史文档。<br>" +
+            (window.ENABLE_COLLAB ? "<b>协同模式下，请确认没有其他成员正在编辑这些文档。</b><br>" : "") +
+            "完成后还需要重新发布项目，阅读页才会生效。",
+            { btn: ["开始", "取消"] },
+            function (confirmIndex) {
+                layer.close(confirmIndex);
+                batchRerender(docs);
+            }
+        );
+    }
+
+    /**
+     * 创建批量渲染专用的 Cherry 实例（纯预览、隐藏容器）。
+     * 复用 basicConfig 保证渲染结果与单篇"重新保存"完全一致。
+     */
+    function getBatchRerenderEditor() {
+        if (window.batchRerenderEditor) {
+            return window.batchRerenderEditor;
+        }
+        $("<div id='batchRerenderContainer'></div>").css({
+            position: "fixed",
+            left: "-99999px",
+            top: "0",
+            width: "800px",
+            visibility: "hidden"
+        }).appendTo("body");
+        var config = Object.assign({}, basicConfig, {
+            id: "batchRerenderContainer",
+            isPreviewOnly: true,
+            toolbars: {
+                toolbar: false,
+                bubble: false,
+                sidebar: false,
+                customMenu: {}
+            }
+        });
+        window.batchRerenderEditor = new Cherry(config);
+        return window.batchRerenderEditor;
+    }
+
+    /**
+     * 批量渲染的 HTML 外包装：与 Cherry.getHtml(true)（Previewer.getValue）输出保持一致，
+     * 外层包一个携带行内代码/代码块高亮主题属性的 div。
+     * 注意：getHtml() 读的是预览区 DOM，而预览渲染是异步节流的，
+     * 批量连续 setMarkdown 后立刻 getHtml 会拿到上一篇的 HTML（曾导致正文整体错位一篇）。
+     * 因此批量渲染必须用 engine.makeHtml（纯同步、不依赖 DOM，见下方调用处）。
+     */
+    function wrapBatchRenderHtml(editor, html) {
+        var inlineCodeTheme = 'default';
+        var codeBlockTheme = 'twilight';
+        try {
+            if (editor.wrapperDom) {
+                var inlineTheme = editor.wrapperDom.getAttribute('data-inline-code-theme');
+                var blockTheme = editor.wrapperDom.getAttribute('data-code-block-theme');
+                if (inlineTheme) inlineCodeTheme = inlineTheme;
+                if (blockTheme) codeBlockTheme = blockTheme;
+            } else if (editor.options && editor.options.engine && editor.options.engine.syntax && editor.options.engine.syntax.codeBlock) {
+                codeBlockTheme = editor.options.engine.syntax.codeBlock.theme || codeBlockTheme;
+            }
+        } catch (e) {
+            console.log(e);
+        }
+        return '<div data-inline-code-theme="' + inlineCodeTheme + '" data-code-block-theme="' + codeBlockTheme + '">' + html + '</div>';
+    }
+
+    /**
+     * 逐篇拉取 Markdown -> Cherry 渲染 -> 保存，串行执行并显示进度。
+     */
+    function batchRerender(docs) {
+        var success = [], failed = [], skipped = [];
+        var progressIndex = layer.open({
+            type: 1,
+            title: "批量重渲染",
+            closeBtn: 0,
+            shade: 0.3,
+            area: ["420px", "180px"],
+            content: '<div id="batchRerenderProgress" style="padding:15px 20px;line-height:2;">准备中...</div>'
+        });
+        var editor = getBatchRerenderEditor();
+
+        function updateProgress(current, text) {
+            $("#batchRerenderProgress").html(
+                "进度：" + current + " / " + docs.length + "<br>正在处理：<b>" + $("<i>").text(text || "").html() + "</b>"
+            );
+        }
+
+        function rerenderOne(i) {
+            if (i >= docs.length) {
+                var summary = "处理完成：成功 " + success.length + " 篇，失败 " + failed.length + " 篇" +
+                    (skipped.length ? "，跳过 " + skipped.length + " 篇（无 Markdown 源文）" : "");
+                layer.close(progressIndex);
+                if (failed.length) {
+                    layer.alert(summary + "<br>失败文档：" + failed.join("、"), { icon: 2 });
+                } else {
+                    layer.msg(summary, { time: 4000 });
+                }
+                if (success.length) {
+                    layer.confirm(
+                        "批量重渲染已完成，是否立即发布项目？<br>（阅读页显示的是发布内容，未发布不会生效）",
+                        { btn: ["立即发布", "稍后手动发布"] },
+                        function (releaseIndex) {
+                            layer.close(releaseIndex);
+                            releaseBook();
+                        }
+                    );
+                }
+                return;
+            }
+            var item = docs[i];
+            updateProgress(i + 1, item.text);
+            $.get(window.editURL + item.id)
+                .then(function (res) {
+                    if (res.errcode !== 0) {
+                        failed.push(item.text);
+                        return;
+                    }
+                    var md = res.data.markdown;
+                    if (!md) {
+                        // 无 Markdown 源文的文档（如纯 HTML）跳过，避免把旧 HTML 当 Markdown 覆写
+                        skipped.push(item.text);
+                        return;
+                    }
+                    var html;
+                    try {
+                        // 必须用 engine.makeHtml 同步渲染：getHtml() 读预览区 DOM，
+                        // 预览渲染异步节流，连续 setMarkdown 后立即 getHtml 会拿到上一篇的 HTML
+                        html = editor.engine.makeHtml(md);
+                        if (!html || !html.replace(/<[^>]+>/g, '').trim()) {
+                            console.log("batch render empty -> " + item.text);
+                            failed.push(item.text);
+                            return;
+                        }
+                        html = wrapBatchRenderHtml(editor, html);
+                    } catch (e) {
+                        console.log("batch render failed -> " + item.text, e);
+                        failed.push(item.text);
+                        return;
+                    }
+                    return $.ajax({
+                        url: window.editURL,
+                        type: "post",
+                        dataType: "json",
+                        timeout: 30000,
+                        data: {
+                            identify: window.book.identify,
+                            doc_id: item.id,
+                            markdown: md,
+                            html: html,
+                            markdown_theme: res.data.markdown_theme || getCherryTheme(),
+                            cover: "yes",
+                            version: res.data.version
+                        }
+                    }).then(function (saveRes) {
+                        if (saveRes.errcode === 0) {
+                            success.push(item.text);
+                            // 同步本地版本号，避免后续手动保存出现版本冲突提示
+                            for (var j in window.documentCategory) {
+                                if (String(window.documentCategory[j].id) === String(item.id)) {
+                                    window.documentCategory[j].version = saveRes.data.version;
+                                    break;
+                                }
+                            }
+                        } else {
+                            console.log("batch save failed -> " + item.text, saveRes.message);
+                            failed.push(item.text);
+                        }
+                    }, function () {
+                        failed.push(item.text);
+                    });
+                }, function () {
+                    failed.push(item.text);
+                })
+                .always(function () {
+                    rerenderOne(i + 1);
+                });
+        }
+
+        rerenderOne(0);
+    }
+
+    /**
      * 文档目录树
      */
     // 为目录树节点注入 href，使鼠标悬浮时浏览器状态栏显示对应编辑 URL
@@ -1057,6 +1262,17 @@ $(function () {
                             var inst = $.jstree.reference(data.reference);
                             var node = inst.get_node(data.reference);
                             openMigrateDocumentDialog(node);
+                        }
+                    };
+                    // 批量重渲染：修复编辑器切换为 cherry 后历史文档正文 HTML 未重渲染的问题
+                    items["批量重渲染"] = {
+                        "separator_before": false,
+                        "separator_after": false,
+                        "_disabled": false,
+                        "label": "批量重渲染",
+                        "icon": "fa fa-refresh",
+                        "action": function () {
+                            openBatchRerenderDialog();
                         }
                     };
                 }
