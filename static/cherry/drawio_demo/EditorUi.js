@@ -4650,6 +4650,19 @@ EditorUi.prototype.openFile = function () {
 		this.hideDialog(cancel);
 	}));
 
+	// MinDoc补丁: 无后端 OPEN_URL，"文件-打开"改为纯前端：读取本地文件整体载入编辑器
+	window.openFile.setConsumer(mxUtils.bind(this, function (xml, filename) {
+		try {
+			var root = window.mindocParseGraphXml(xml);
+			this.editor.setGraphXml(root);
+			this.editor.setFilename(filename);
+			this.updateDocumentTitle();
+		}
+		catch (e) {
+			mxUtils.alert(mxResources.get('invalidOrMissingFile') + ': ' + e.message);
+		}
+	}));
+
 	// Removes openFile if dialog is closed
 	this.showDialog(new OpenDialog(this).container, (Editor.useLocalStorage) ? 640 : 320,
 		(Editor.useLocalStorage) ? 480 : 220, true, true, function () {
@@ -4976,16 +4989,10 @@ EditorUi.prototype.save = function (name) {
 				this.editor.setStatus(mxUtils.htmlEntities(mxResources.get('saved')) + ' ' + new Date());
 			}
 			else {
-				if (xml.length < MAX_REQUEST_SIZE) {
-					new mxXmlRequest(SAVE_URL, 'filename=' + encodeURIComponent(name) +
-						'&xml=' + encodeURIComponent(xml)).simulate(document, '_blank');
-				}
-				else {
-					mxUtils.alert(mxResources.get('drawingTooLarge'));
-					mxUtils.popup(xml);
-
-					return;
-				}
+				// MinDoc补丁: 无后端 SAVE_URL，保存改为本地下载 .drawio 文件
+				var downloadName = (/\.(drawio|xml)$/.test(name)) ? name : name + '.drawio';
+				this.doDownloadFile(xml, downloadName, 'application/xml', false);
+				this.editor.setStatus(mxUtils.htmlEntities(mxResources.get('saved')) + ' ' + new Date());
 			}
 
 			this.editor.setModified(false);
@@ -6054,23 +6061,79 @@ EditorUi.prototype.saveCanvas = function (canvas, xml, format, exportHandler) {
 };
 
 
+/**
+ * MinDoc补丁: 原代码引用但未定义的方法，用于触发浏览器本地下载。
+ * data 为明文内容或 base64（base64Encoded=true 时需带 mimeType）
+ */
+EditorUi.prototype.doDownloadFile = function (data, filename, mimeType, base64Encoded) {
+	try {
+		var href;
+		if (base64Encoded) {
+			href = 'data:' + (mimeType || 'application/octet-stream') + ';base64,' + data;
+		}
+		else if (data.substring(0, 5) === 'data:' || data.substring(0, 5) === 'blob:') {
+			href = data;
+		}
+		else {
+			var blob = new Blob([data], { type: (mimeType || 'application/octet-stream') });
+			href = URL.createObjectURL(blob);
+		}
+		var a = document.createElement('a');
+		a.href = href;
+		a.download = filename;
+		a.rel = 'noopener';
+		a.style.display = 'none';
+		document.body.appendChild(a);
+		a.click();
+		document.body.removeChild(a);
+
+		if (href.substring(0, 5) === 'blob:') {
+			setTimeout(function () { URL.revokeObjectURL(href); }, 5000);
+		}
+	}
+	catch (e) {
+		this.handleError(e);
+	}
+};
+
 EditorUi.prototype.getBaseFilename = function () {
 	return this.editor.getFilename();
 };
 
 
+// MinDoc补丁(v=2026011903): 原实现存在两个问题：
+// ① 外链图片跨域污染 canvas，toDataURL 抛 SecurityError 且异常发生在 img.onload 内无法被上层捕获，
+//    导致导出流程中断、"确定"按钮无响应；
+// ② 图片加载失败时 onload 永不触发，导出流程挂死。
+// 改为：crossOrigin 匿名加载（CDN 支持 CORS 时正常导出图标），任何失败返回 null 跳过该图片继续导出。
 EditorUi.prototype.convertImageToDataUri = function (src, call) {
 	let img = new Image();
-	img.src = src;
-	img.onload = function() {
-		let canvas = document.createElement('canvas');
-		canvas.width = img.width;
-		canvas.height = img.height;
-		let ctx = canvas.getContext('2d');
-		ctx.drawImage(img, 0, 0);
-		let base64 = canvas.toDataURL('image/png');
-		call(base64)
+	img.crossOrigin = 'anonymous';
+	let finished = false;
+	let finish = function (uri) {
+		if (!finished) {
+			finished = true;
+			call(uri);
+		}
 	};
+	img.onload = function() {
+		try {
+			let canvas = document.createElement('canvas');
+			canvas.width = img.width;
+			canvas.height = img.height;
+			let ctx = canvas.getContext('2d');
+			ctx.drawImage(img, 0, 0);
+			let base64 = canvas.toDataURL('image/png');
+			finish(base64);
+		}
+		catch (e) {
+			finish(null);
+		}
+	};
+	img.onerror = function() {
+		finish(null);
+	};
+	img.src = src;
 }
 
 

@@ -85,8 +85,9 @@ Actions.prototype.init = function()
 		{
 			try
 			{
-				var doc = mxUtils.parseXml(xml);
-				editor.graph.setSelectionCells(editor.graph.importGraphModel(doc.documentElement));
+				// MinDoc补丁: 兼容 mxfile 包装（diagrams.net 的 .drawio 文件）
+				var root = window.mindocParseGraphXml(xml);
+				editor.graph.setSelectionCells(editor.graph.importGraphModel(root));
 			}
 			catch (e)
 			{

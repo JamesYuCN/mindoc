@@ -4,23 +4,46 @@
 /**
  * Constructs a new open dialog.
  */
-var OpenDialog = function()
+var OpenDialog = function(editorUi)
 {
-	var iframe = document.createElement('iframe');
-	iframe.style.backgroundColor = 'transparent';
-	iframe.allowTransparency = 'true';
-	iframe.style.borderStyle = 'none';
-	iframe.style.borderWidth = '0px';
-	iframe.style.overflow = 'hidden';
-	iframe.style.maxWidth = '100%';
-	iframe.frameBorder = '0';
-	
-	var dx = 0;
-	iframe.setAttribute('width', (((Editor.useLocalStorage) ? 640 : 320) + dx) + 'px');
-	iframe.setAttribute('height', (((Editor.useLocalStorage) ? 480 : 220) + dx) + 'px');
-	iframe.setAttribute('src', OPEN_FORM);
-	
-	this.container = iframe;
+	// MinDoc补丁: 原实现 iframe 加载 OPEN_FORM（默认 ./drawio_demo 目录，本系统无后端处理页），
+	// 提交文件会请求 /static/cherry/drawio_demo 目录导致服务端 panic。
+	// 改为纯前端实现：FileReader 直接读取本地文件，经 window.openFile 交给消费者处理
+	var div = document.createElement('div');
+	div.style.padding = '10px';
+	div.style.whiteSpace = 'nowrap';
+	div.style.textAlign = 'center';
+
+	var input = document.createElement('input');
+	input.setAttribute('type', 'file');
+	input.style.margin = '10px';
+	div.appendChild(input);
+
+	var hint = document.createElement('div');
+	hint.style.fontSize = '12px';
+	hint.style.color = '#999';
+	hint.textContent = mxResources.get('selectFile', null, 'Select a file') || '';
+	div.appendChild(hint);
+
+	input.addEventListener('change', function()
+	{
+		var file = (input.files && input.files.length > 0) ? input.files[0] : null;
+		if (file != null && window.openFile != null)
+		{
+			var reader = new FileReader();
+			reader.onload = function()
+			{
+				window.openFile.setData(reader.result, file.name);
+			};
+			reader.onerror = function()
+			{
+				window.openFile.error(mxResources.get('invalidOrMissingFile'));
+			};
+			reader.readAsText(file);
+		}
+	});
+
+	this.container = div;
 };
 
 /**
@@ -1352,12 +1375,8 @@ ExportDialog.exportFile = function(editorUi, name, format, bg, s, b, dpi, grid)
 		if (param.length <= MAX_REQUEST_SIZE && w * h < MAX_AREA)
 		{
 			editorUi.hideDialog();
-			var req = new mxXmlRequest(EXPORT_URL, 'format=' + format +
-				'&filename=' + encodeURIComponent(name) +
-				'&bg=' + ((bg != null) ? bg : 'none') +
-				'&w=' + w + '&h=' + h + '&' + param +
-				'&dpi=' + dpi);
-			req.simulate(document, '_blank');
+			// MinDoc补丁: 无后端 EXPORT_URL，png/jpeg 改为客户端 exportImage 渲染并本地下载
+			editorUi.exportImage(s, (bg == null), null, false, false, b, null, (format == 'jpeg') ? 'jpeg' : 'png');
 		}
 		else
 		{
@@ -1377,14 +1396,17 @@ ExportDialog.saveLocalFile = function(editorUi, data, filename, format)
 	if (data.length < MAX_REQUEST_SIZE)
 	{
 		editorUi.hideDialog();
-		var req = new mxXmlRequest(SAVE_URL, 'xml=' + encodeURIComponent(data) + '&filename=' +
-			encodeURIComponent(filename) + '&format=' + format);
-		req.simulate(document, '_blank');
+		// MinDoc补丁: 无后端 SAVE_URL，改为纯前端本地下载
+		var ext = (format == 'svg') ? '.svg' : '.drawio';
+		if (!/\.(drawio|xml|svg)$/.test(filename))
+		{
+			filename = filename + ext;
+		}
+		editorUi.doDownloadFile(data, filename, (format == 'svg') ? 'image/svg+xml' : 'application/xml', false);
 	}
 	else
 	{
 		mxUtils.alert(mxResources.get('drawingTooLarge'));
-		mxUtils.popup(xml);
 	}
 };
 

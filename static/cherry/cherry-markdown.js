@@ -83929,7 +83929,18 @@
         if (target instanceof HTMLImageElement) {
           if (target.tagName === "IMG" && target.getAttribute("data-type") === "drawio" && this.$cherry.status.editor === "show" && this.$hasEditor()) {
             if (!this.beginChangeDrawioImg(target)) return;
-            var xmlData = decodeURI(target.getAttribute("data-xml"));
+            // MinDoc补丁: data-xml 存储编码不统一（工具栏插入用 encodeURI，预览区重存用 encodeURIComponent），
+            // decodeURI 不会解码 %3D(%3D是保留字符'='的编码) 导致 XML 残留转义、drawio 加载空白，
+            // 这里统一用 decodeURIComponent 彻底解码，失败时逐级回退
+            var rawDrawioXml = target.getAttribute("data-xml");
+            var xmlData = rawDrawioXml;
+            try {
+              xmlData = decodeURIComponent(rawDrawioXml);
+            } catch (drawioDecodeErr) {
+              try {
+                xmlData = decodeURI(rawDrawioXml);
+              } catch (drawioDecodeErr2) {}
+            }
             drawioDialog(this.previewer.$cherry.options.drawioIframeUrl, this.previewer.$cherry.options.drawioIframeStyle, xmlData, function (newData) {
               var xmlData = newData.xmlData,
                 base64 = newData.base64;
