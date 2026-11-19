@@ -179,24 +179,28 @@ Actions.prototype.init = function()
 				{
 					ui.readGraphModelFromClipboard(function(xml)
 					{
+						var cells = null;
+
 						if (xml != null)
 						{
 							graph.getModel().beginUpdate();
 							try
 							{
-								ui.pasteXml(xml, true);
+								// MinDoc补丁(v=2026011904): pasteXml 失败返回 null 时回退内部剪贴板
+								cells = ui.pasteXml(xml, true);
 							}
 							finally
 							{
 								graph.getModel().endUpdate();
 							}
 						}
-						else
+
+						if (cells == null)
 						{
 							mxClipboard.paste(graph);
 						}
 					})
-					
+
 					done = true;
 				}
 			}
@@ -275,24 +279,32 @@ Actions.prototype.init = function()
 				{
 					ui.readGraphModelFromClipboard(function(xml)
 					{
+						var cells = null;
+
 						if (xml != null)
 						{
 							graph.getModel().beginUpdate();
 							try
 							{
-								pasteCellsHere(ui.pasteXml(xml, true));
+								// MinDoc补丁(v=2026011904): pasteXml 失败返回 null 时回退内部剪贴板
+								cells = ui.pasteXml(xml, true);
 							}
 							finally
 							{
 								graph.getModel().endUpdate();
 							}
 						}
+
+						if (cells != null)
+						{
+							pasteCellsHere(cells);
+						}
 						else
 						{
 							fallback();
 						}
 					})
-					
+
 					done = true;
 				}
 			}
@@ -303,11 +315,29 @@ Actions.prototype.init = function()
 			
 			if (!done)
 			{
-				fallback();
+				// MinDoc补丁(v=2026011905): http 非安全上下文（navigator.clipboard 不存在）时
+				// 无法编程读取系统剪贴板，改为弹出粘贴对话框（在文本框内按 Ctrl+V），
+				// 粘贴内容定位到右键点击处
+				if (navigator.clipboard == null)
+				{
+					ui.showPasteDialog(function (text)
+					{
+						var cells = ui.pasteXml(text, true);
+
+						if (cells != null)
+						{
+							pasteCellsHere(cells);
+						}
+					});
+				}
+				else
+				{
+					fallback();
+				}
 			}
 		}
 	});
-	
+
 	this.addAction('copySize', function()
 	{
 		var cell = graph.getSelectionCell();

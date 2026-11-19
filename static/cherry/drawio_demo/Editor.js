@@ -215,7 +215,10 @@ Editor.simpleLabels = false;
  * Specifies if the native clipboard is enabled. Blocked in iframes for possible sandbox attribute.
  * LATER: Check if actually blocked.
  */
-Editor.enableNativeCipboard = window == window.top && !mxClient.IS_FF && navigator.clipboard != null;
+// MinDoc补丁(v=2026011904): 原条件要求 window == window.top，但本编辑器运行在 iframe 中，
+// 导致原生剪贴板读取永远禁用、无法粘贴外部复制的图形。去掉 iframe 限制；
+// http 非安全上下文中 navigator.clipboard 为 undefined 时自然回退到内部剪贴板+paste 事件方案。
+Editor.enableNativeCipboard = !mxClient.IS_FF && navigator.clipboard != null;
 		
 /**
  * Dynamic change of dark mode for minimal and sketch theme.

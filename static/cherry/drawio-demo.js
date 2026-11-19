@@ -29,6 +29,9 @@
       console.log(error);
     }
     window.parent.postMessage({ eventName: 'ready', value: '' }, '*');
+    // MinDoc补丁(v=2026011905): 编辑器就绪后尝试取得焦点，
+    // 使 Ctrl+V 的 paste 事件直接落在本页面（配合父页面监听双保险）
+    try { window.focus(); } catch (focusErr) { }
 
   }, function () {
     document.body.innerHTML = '<center style="margin-top:10%;">Error loading resource files. Please check browser console.</center>';
@@ -90,7 +93,70 @@ window.mindocParseGraphXml = function (xmlText) {
   return root;
 };
 
+// MinDoc补丁(v=2026011905): 粘贴监听器（可挂到本页面或同源的父页面）。
+// paste 事件只发生在持有键盘焦点的页面：drawio 对话框打开后用户往往未点击画布，
+// 焦点仍在 mindoc 编辑器父页面，Ctrl+V 的 paste 事件不会到达本 iframe。
+// 因此同源时同时监听父页面，并仅在本对话框可见时拦截。
+window.mindocAttachPasteHandler = function (doc) {
+  doc.addEventListener('paste', function (evt) {
+    if (window.editorUIInstance == null) {
+      return;
+    }
+    var graph = window.editorUIInstance.editor.graph;
+    if (graph.cellEditor.isContentEditing()) {
+      return; // 文本编辑状态下不拦截
+    }
+    if (doc !== document) {
+      // 父页面触发：仅当本 iframe（drawio 对话框）可见时才拦截
+      try {
+        if (window.frameElement == null || window.frameElement.offsetParent == null) {
+          return;
+        }
+      } catch (frameErr) {
+        return;
+      }
+    }
+    var text = null;
+    try {
+      var dt = evt.clipboardData || (doc.defaultView ? doc.defaultView.clipboardData : null);
+      if (dt != null) {
+        text = dt.getData('text/plain');
+      }
+    } catch (pasteReadErr) {
+      return;
+    }
+    if (text == null || mxUtils.trim(text).length === 0) {
+      return;
+    }
+    if (!window.editorUIInstance.isCompatibleString(text)) {
+      return; // 非 drawio 数据，放行默认粘贴行为
+    }
+    evt.preventDefault();
+    var model = graph.getModel();
+    model.beginUpdate();
+    try {
+      window.editorUIInstance.pasteXml(mxUtils.trim(text), true);
+    } finally {
+      model.endUpdate();
+    }
+  }, false);
+};
+
 function addPostMessageListener(graphEditor) {
+  // MinDoc补丁(v=2026011904): 支持从 drawio 客户端/其它窗口复制图形后 Ctrl+V 粘贴。
+  // 原实现依赖 navigator.clipboard.read()，在 iframe + http 非安全上下文中不可用；
+  // document 的 paste 事件无需任何权限即可读取 text/plain 剪贴板内容。
+  // 只拦截包含 drawio XML/压缩串的剪贴板数据，其它内容放行浏览器默认行为。
+  window.mindocAttachPasteHandler(document);
+  // 同源时同时监听父页面（用户焦点在父页面编辑器中按 Ctrl+V 也能粘贴到 drawio 画布）
+  try {
+    if (window.parent != null && window.parent.document) {
+      window.mindocAttachPasteHandler(window.parent.document);
+    }
+  } catch (parentListenerErr) {
+    // 跨域时忽略
+  }
+
   window.addEventListener('message', function (event) {
     if (!event.data || !event.data.eventName) {
       return

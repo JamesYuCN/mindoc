@@ -584,7 +584,7 @@ $(function () {
         // MinDoc补丁: 带版本参数加载 drawio iframe 页面，
         // 避免浏览器对无 Cache-Control 的静态页做启发式缓存导致点击图片后仍运行旧脚本
         // （iframe 是点击后才加载的，Ctrl+F5 不会刷新它）。部署新版后更新此版本号即可。
-        drawioIframeUrl: '/static/cherry/drawio_demo.html?v=2026011903',
+        drawioIframeUrl: '/static/cherry/drawio_demo.html?v=2026011905',
         editor: {
             defaultModel: 'edit&preview',
             height: "100%",

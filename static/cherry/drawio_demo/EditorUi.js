@@ -2146,9 +2146,10 @@ EditorUi.prototype.updatePasteActionStates = function () {
 	var paste = this.actions.get('paste');
 	var pasteHere = this.actions.get('pasteHere');
 
-	paste.setEnabled(this.editor.graph.cellEditor.isContentEditing() ||
-		(((!mxClient.IS_FF && navigator.clipboard != null) || !mxClipboard.isEmpty()) &&
-			graph.isEnabled() && !graph.isCellLocked(graph.getDefaultParent())));
+	// MinDoc补丁(v=2026011904): 编辑器运行在 iframe 且部署在 http（非安全上下文）时
+	// navigator.clipboard 不可用，原条件导致"粘贴/贴于此次"菜单永远隐藏。
+	// 外部剪贴板粘贴由 paste 事件监听器提供（无需权限），此处始终按画布状态启用。
+	paste.setEnabled(graph.isEnabled() && !graph.isCellLocked(graph.getDefaultParent()));
 	pasteHere.setEnabled(paste.isEnabled());
 };
 
@@ -4939,8 +4940,109 @@ EditorUi.prototype.extractGraphModelFromEvent = function (evt) {
  * Hook for subclassers to return true if event data is a supported format.
  * This implementation always returns false.
  */
+// MinDoc补丁(v=2026011904): 原实现为桩（永远 return false），导致剪贴板中的 drawio 数据不被识别。
+// 支持 <mxGraphModel>/<mxfile> 明文 XML 和 drawio 压缩串。
 EditorUi.prototype.isCompatibleString = function (data) {
+	try {
+		if (data != null && data.length > 0) {
+			var s = mxUtils.trim(data);
+			if (s.substring(0, 12) === '<mxGraphModel' || s.substring(0, 7) === '<mxfile') {
+				return true;
+			}
+			// drawio 压缩串（无 XML 头）
+			if (s.substring(0, 1) !== '<') {
+				var inflated = this.editor.graph.decompress(s);
+				if (inflated != null) {
+					var t = mxUtils.trim(String(inflated));
+					return t.substring(0, 12) === '<mxGraphModel' || t.substring(0, 7) === '<mxfile';
+				}
+			}
+		}
+	}
+	catch (e) {
+		// ignore
+	}
 	return false;
+};
+
+// MinDoc补丁(v=2026011904): Actions.js 的 paste/pasteHere 调用此方法但原文件中未定义。
+// 解析剪贴板 XML（复用 mindocParseGraphXml 兼容 mxfile 压缩包装/桌面版未压缩格式），
+// 导入到当前画布并选中，返回导入的 cell 数组（失败返回 null）。
+EditorUi.prototype.pasteXml = function (xml, usePasteHandler) {
+	var graph = this.editor.graph;
+	var cells = null;
+	try {
+		var string = mxUtils.trim(xml);
+		var root = null;
+		if (string.substring(0, 1) === '<') {
+			root = window.mindocParseGraphXml(string);
+		}
+		else {
+			var inflated = this.editor.graph.decompress(string);
+			if (inflated != null && String(inflated).substring(0, 1) === '<') {
+				root = window.mindocParseGraphXml(String(inflated));
+			}
+		}
+		if (root != null && root.nodeName === 'mxGraphModel') {
+			cells = graph.importGraphModel(root);
+			if (cells != null && cells.length > 0) {
+				graph.setSelectionCells(cells);
+			}
+			else {
+				cells = null;
+			}
+		}
+	}
+	catch (e) {
+		if (window.console != null) {
+			console.log('pasteXml failed', e);
+		}
+		cells = null;
+	}
+	return cells;
+};
+
+// MinDoc补丁(v=2026011905): http 非安全上下文无法编程读取系统剪贴板（navigator.clipboard 不存在），
+// 右键"贴于此次"时弹出对话框，引导用户在文本框中按 Ctrl+V（paste 事件无需权限），
+// 取到内容后回调并定位到右键位置。
+EditorUi.prototype.showPasteDialog = function (onText) {
+	var div = document.createElement('div');
+	div.style.padding = '10px';
+
+	var hint = document.createElement('div');
+	hint.style.marginBottom = '8px';
+	hint.style.fontSize = '12px';
+	hint.textContent = mxResources.get('paste', null, 'Paste') + ': Ctrl+V';
+	div.appendChild(hint);
+
+	var textarea = document.createElement('textarea');
+	textarea.setAttribute('rows', '6');
+	textarea.style.width = '100%';
+	textarea.style.boxSizing = 'border-box';
+	div.appendChild(textarea);
+
+	var finished = false;
+	var handlePaste = mxUtils.bind(this, function (evt) {
+		var text = null;
+		try {
+			text = (evt.clipboardData || window.clipboardData).getData('text/plain');
+		} catch (pasteErr) {
+			text = null;
+		}
+		if (text != null && mxUtils.trim(text).length > 0) {
+			finished = true;
+			this.hideDialog();
+			onText(text);
+		}
+	});
+	mxEvent.addListener(textarea, 'paste', handlePaste);
+
+	this.showDialog(div, 320, 160, true, true, function () {
+		if (!finished) {
+			mxEvent.removeListener(textarea, 'paste', handlePaste);
+		}
+	});
+	textarea.focus();
 };
 
 /**
